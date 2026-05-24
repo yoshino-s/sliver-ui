@@ -1,0 +1,20 @@
+root = "backend"
+tmp_dir = "../tmp/air"
+
+[build]
+cmd = "go build -o ../tmp/air/sliver-gateway ./cmd/sliver-gateway"
+bin = "../tmp/air/sliver-gateway -addr :8080 -static ../dist"
+include_ext = ["go"]
+exclude_dir = ["../dist", "../node_modules", "../bin", "../tmp", "internal/web/dist"]
+exclude_regex = ["_test.go"]
+delay = 1000
+stop_on_error = true
+send_interrupt = true
+kill_delay = "500ms"
+
+[log]
+time = true
+
+[screen]
+clear_on_rebuild = false
+keep_scroll = true

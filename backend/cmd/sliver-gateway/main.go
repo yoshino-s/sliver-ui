@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,12 +19,13 @@ import (
 	"sliver-web-client/backend/internal/generated/connect/gatewaypb/gatewaypbconnect"
 	"sliver-web-client/backend/internal/generated/connect/rpcpb/rpcpbconnect"
 	"sliver-web-client/backend/internal/generated/gatewaypb"
+	"sliver-web-client/backend/internal/web"
 )
 
 func main() {
 	addr := flag.String("addr", envOrDefault("SLIVER_GATEWAY_ADDR", ":8080"), "HTTP listen address")
 	configPath := flag.String("config", os.Getenv("SLIVER_CONFIG_PATH"), "Sliver operator config path")
-	staticDir := flag.String("static", envOrDefault("SLIVER_WEB_STATIC", "../dist"), "Static web directory")
+	staticDir := flag.String("static", os.Getenv("SLIVER_WEB_STATIC"), "Static web directory; uses embedded frontend when empty")
 	flag.Parse()
 
 	store := gateway.NewSessionStore()
@@ -75,6 +78,10 @@ func newHTTPHandler(store *gateway.SessionStore, staticDir string) http.Handler 
 
 	if staticDir != "" {
 		registerStatic(mux, staticDir)
+	} else if embedded, err := web.StaticFS(); err == nil {
+		registerStaticFS(mux, embedded)
+	} else {
+		log.Printf("embedded frontend unavailable: %v", err)
 	}
 
 	return withCORS(mux)
@@ -107,22 +114,36 @@ func withCORS(next http.Handler) http.Handler {
 }
 
 func registerStatic(mux *http.ServeMux, dir string) {
-	fileServer := http.FileServer(http.Dir(dir))
+	registerStaticFS(mux, os.DirFS(dir))
+}
+
+func registerStaticFS(mux *http.ServeMux, staticFS fs.FS) {
+	fileServer := http.FileServer(http.FS(staticFS))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		path := filepath.Clean(r.URL.Path)
 		if path == "." || path == "/" {
-			http.ServeFile(w, r, filepath.Join(dir, "index.html"))
+			serveIndex(w, r, staticFS)
 			return
 		}
 
-		fullPath := filepath.Join(dir, path)
-		if info, err := os.Stat(fullPath); err == nil && !info.IsDir() {
+		filePath := strings.TrimPrefix(path, "/")
+		if info, err := fs.Stat(staticFS, filePath); err == nil && !info.IsDir() {
 			fileServer.ServeHTTP(w, r)
 			return
 		}
 
-		http.ServeFile(w, r, filepath.Join(dir, "index.html"))
+		serveIndex(w, r, staticFS)
 	})
+}
+
+func serveIndex(w http.ResponseWriter, r *http.Request, staticFS fs.FS) {
+	index, err := fs.ReadFile(staticFS, "index.html")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write(index)
 }
 
 func envOrDefault(name string, fallback string) string {

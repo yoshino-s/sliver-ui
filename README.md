@@ -61,25 +61,39 @@ npm run dev
 Start the Go gateway:
 
 ```bash
-npm run dev:backend
+make dev-backend
 ```
 
-Run a production-style build and serve the built UI from the gateway:
+Run the Go gateway with Air hot reload for debugging:
 
 ```bash
-npm run dev:full
+make debug
 ```
 
-Create a production build:
+Create a release build. This builds the frontend, copies it into the backend
+embed directory, and builds a single gateway binary:
 
 ```bash
-npm run build
+make release
 ```
+
+The release binary is written to `bin/sliver-gateway` and serves the embedded
+frontend by default. Use `-static /path/to/dist` only when you want to override
+the embedded frontend with files from disk.
 
 Run all checks:
 
 ```bash
 npm run check
+```
+
+The Makefile equivalents are:
+
+```bash
+make check
+make build
+make release
+make clean
 ```
 
 ## Connect RPC generation
