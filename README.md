@@ -1,30 +1,33 @@
 # Sliver Web Client
 
-A browser-based Sliver client prototype built with Vite, React, and TypeScript.
-It provides a web dashboard for the common `sliver-client` workflows:
+A browser-based Sliver client built with a Go mTLS gateway plus a Vite, React,
+and TypeScript frontend. It provides a web dashboard for common `sliver-client`
+workflows:
 
 - operator profile import
-- gateway connection setup
-- implant inventory
-- session overview
-- listener status
+- mTLS gateway connection setup
+- implant build/profile inventory and generation requests
+- session and beacon overview
+- common session commands
+- listener creation
 - job tracking
-- loot browsing
-- operator console placeholder
+- loot browsing/content requests
+- operator console commands
 
 ## Security model
 
 The native Sliver client uses a token plus client certificates/private keys to
 open an mTLS-backed RPC channel. A browser should not own that raw channel or
-persist operator secrets. This UI parses an imported `sliver.cfg` in memory and
-shows only derived metadata.
+persist operator secrets. The browser sends the imported `sliver.cfg` to the Go
+gateway, and the gateway owns the native Sliver mTLS gRPC connection in memory.
 
-For live operations, add a trusted server-side gateway that:
+For production use, run the gateway only on a trusted host/network and add
+deployment controls appropriate for your environment:
 
-1. Loads the Sliver operator profile on the server side.
-2. Opens the native Sliver RPC connection.
-3. Exposes a browser-safe HTTPS or WebSocket API to this UI.
-4. Applies authentication, authorization, audit logging, and rate limits.
+1. HTTPS in front of the gateway.
+2. Strong user authentication and authorization.
+3. Audit logging for operator actions.
+4. Network allowlists and rate limits.
 
 `sliver.cfg` is intentionally ignored by Git because it contains credentials and
 private keys.
@@ -37,10 +40,28 @@ Install dependencies:
 npm install
 ```
 
-Start the dev server:
+Generate the OpenAPI document and TypeScript API client:
+
+```bash
+npm run generate:api
+```
+
+Start the frontend dev server:
 
 ```bash
 npm run dev
+```
+
+Start the Go gateway:
+
+```bash
+npm run dev:backend
+```
+
+Run a production-style build and serve the built UI from the gateway:
+
+```bash
+npm run dev:full
 ```
 
 Create a production build:
@@ -49,8 +70,42 @@ Create a production build:
 npm run build
 ```
 
-## Current scope
+Run all checks:
 
-This first version is a front-end prototype. It is ready for the next integration
-step: adding a server-side Sliver gateway and replacing prototype data with API
-responses.
+```bash
+npm run check
+```
+
+## API documentation and client generation
+
+The Go API is defined with Huma route/input/output types. The gateway exposes
+OpenAPI automatically at runtime, and the repository can also generate a static
+spec:
+
+```bash
+npm run generate:openapi
+```
+
+The generated files are:
+
+- `openapi/openapi.json`
+- `src/api/schema.ts`
+
+The frontend client wrapper lives in `src/api/client.ts` and uses
+`openapi-fetch` with the generated `paths` type.
+
+## Gateway configuration
+
+The gateway can connect from the UI by pasting/importing `sliver.cfg`, or it can
+load a config on startup:
+
+```bash
+SLIVER_CONFIG_PATH=/path/to/sliver.cfg npm run dev:backend
+```
+
+Useful options:
+
+```bash
+cd backend
+go run ./cmd/sliver-gateway -addr :8080 -config /path/to/sliver.cfg -static ../dist
+```

@@ -1,0 +1,1177 @@
+{
+  "components": {
+    "schemas": {
+      "ClientConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "http://localhost:8080/schemas/ClientConfig.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "ca_certificate": {
+            "type": "string"
+          },
+          "certificate": {
+            "type": "string"
+          },
+          "lhost": {
+            "type": "string"
+          },
+          "lport": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "operator": {
+            "type": "string"
+          },
+          "private_key": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operator",
+          "lhost",
+          "lport",
+          "token",
+          "ca_certificate",
+          "private_key",
+          "certificate"
+        ],
+        "type": "object"
+      },
+      "ConnectFileInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "http://localhost:8080/schemas/ConnectFileInputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "path": {
+            "description": "Path to a Sliver operator config file on the gateway host",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "ConnectResult": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "http://localhost:8080/schemas/ConnectResult.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "ErrorDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "location": {
+            "description": "Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id'",
+            "type": "string"
+          },
+          "message": {
+            "description": "Error message text",
+            "type": "string"
+          },
+          "value": {
+            "description": "The value at the given location"
+          }
+        },
+        "type": "object"
+      },
+      "ErrorModel": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "http://localhost:8080/schemas/ErrorModel.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "detail": {
+            "description": "A human-readable explanation specific to this occurrence of the problem.",
+            "examples": [
+              "Property foo is required but is missing."
+            ],
+            "type": "string"
+          },
+          "errors": {
+            "description": "Optional list of individual error details",
+            "items": {
+              "$ref": "#/components/schemas/ErrorDetail"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "instance": {
+            "description": "A URI reference that identifies the specific occurrence of the problem.",
+            "examples": [
+              "https://example.com/error-log/abc123"
+            ],
+            "format": "uri",
+            "type": "string"
+          },
+          "status": {
+            "description": "HTTP status code",
+            "examples": [
+              400
+            ],
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "A short, human-readable summary of the problem type. This value should not change between occurrences of the error.",
+            "examples": [
+              "Bad Request"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "default": "about:blank",
+            "description": "A URI reference to human-readable documentation for the error.",
+            "examples": [
+              "https://example.com/errors/example"
+            ],
+            "format": "uri",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ListenerRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "http://localhost:8080/schemas/ListenerRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "acme": {
+            "description": "Enable ACME for HTTPS listeners",
+            "type": "boolean"
+          },
+          "canaries": {
+            "description": "Enable DNS canaries",
+            "type": "boolean"
+          },
+          "certPem": {
+            "description": "HTTPS certificate PEM",
+            "type": "string"
+          },
+          "domain": {
+            "description": "HTTP/HTTPS domain or primary DNS domain",
+            "type": "string"
+          },
+          "domains": {
+            "description": "DNS listener domains",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "enforceOtp": {
+            "description": "Require one-time payload tokens when supported",
+            "type": "boolean"
+          },
+          "host": {
+            "description": "Bind host",
+            "examples": [
+              "0.0.0.0"
+            ],
+            "type": "string"
+          },
+          "keyPem": {
+            "description": "HTTPS private key PEM",
+            "type": "string"
+          },
+          "longPollJitter": {
+            "description": "HTTP long-poll jitter",
+            "format": "int64",
+            "type": "integer"
+          },
+          "longPollTimeout": {
+            "description": "HTTP long-poll timeout",
+            "format": "int64",
+            "type": "integer"
+          },
+          "persistent": {
+            "description": "Make the listener persistent",
+            "type": "boolean"
+          },
+          "port": {
+            "description": "Bind port",
+            "format": "int32",
+            "maximum": 65535,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "protocol": {
+            "description": "Listener protocol",
+            "enum": [
+              "mtls",
+              "http",
+              "https",
+              "dns"
+            ],
+            "type": "string"
+          },
+          "website": {
+            "description": "Sliver website name for HTTP/HTTPS listeners",
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocol",
+          "host",
+          "port"
+        ],
+        "type": "object"
+      },
+      "MessageOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "http://localhost:8080/schemas/MessageOutputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "type": "object"
+      },
+      "SessionCommandRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "http://localhost:8080/schemas/SessionCommandRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "args": {
+            "description": "Execute arguments",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "async": {
+            "description": "Run asynchronously when supported",
+            "type": "boolean"
+          },
+          "beaconId": {
+            "description": "Target beacon ID for async tasks",
+            "type": "string"
+          },
+          "command": {
+            "description": "Session command to run",
+            "enum": [
+              "ping",
+              "ps",
+              "pwd",
+              "ls",
+              "cd",
+              "execute",
+              "shell"
+            ],
+            "type": "string"
+          },
+          "output": {
+            "description": "Capture execute output",
+            "type": "boolean"
+          },
+          "path": {
+            "description": "Path used by ls, cd, execute, or shell",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Target session ID",
+            "type": "string"
+          },
+          "timeout": {
+            "description": "Request timeout in seconds",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "command",
+          "sessionId"
+        ],
+        "type": "object"
+      },
+      "Status": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "http://localhost:8080/schemas/Status.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "connected": {
+            "description": "Whether the gateway has an active Sliver RPC client",
+            "type": "boolean"
+          },
+          "connectedAt": {
+            "description": "Connection timestamp in RFC3339 format",
+            "type": "string"
+          },
+          "endpoint": {
+            "description": "Sliver server host:port",
+            "type": "string"
+          },
+          "operator": {
+            "description": "Loaded operator name",
+            "type": "string"
+          },
+          "version": {
+            "additionalProperties": {},
+            "description": "Sliver server version, when available",
+            "type": "object"
+          }
+        },
+        "required": [
+          "connected"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Browser-safe HTTP API that forwards requests to a Sliver server over mTLS gRPC.",
+    "title": "Sliver Web Gateway",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/beacons": {
+      "get": {
+        "operationId": "get-api-beacons",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {},
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get API beacons"
+      }
+    },
+    "/api/connect": {
+      "post": {
+        "operationId": "post-api-connect",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientConfig"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Post API connect"
+      }
+    },
+    "/api/connect/file": {
+      "post": {
+        "operationId": "post-api-connect-file",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectFileInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Post API connect file"
+      }
+    },
+    "/api/disconnect": {
+      "post": {
+        "operationId": "post-api-disconnect",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Post API disconnect"
+      }
+    },
+    "/api/implants/builds": {
+      "get": {
+        "operationId": "get-api-implants-builds",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {},
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get API implants builds"
+      }
+    },
+    "/api/implants/builds/{name}": {
+      "delete": {
+        "operationId": "delete-api-implants-builds-by-name",
+        "parameters": [
+          {
+            "description": "Resource name",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Resource name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Delete API implants builds by name"
+      }
+    },
+    "/api/implants/generate": {
+      "post": {
+        "operationId": "post-api-implants-generate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {},
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Post API implants generate"
+      }
+    },
+    "/api/implants/profiles": {
+      "get": {
+        "operationId": "get-api-implants-profiles",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {},
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get API implants profiles"
+      },
+      "post": {
+        "operationId": "post-api-implants-profiles",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {},
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Post API implants profiles"
+      }
+    },
+    "/api/implants/profiles/{name}": {
+      "delete": {
+        "operationId": "delete-api-implants-profiles-by-name",
+        "parameters": [
+          {
+            "description": "Resource name",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Resource name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Delete API implants profiles by name"
+      }
+    },
+    "/api/jobs": {
+      "get": {
+        "operationId": "get-api-jobs",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {},
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get API jobs"
+      }
+    },
+    "/api/jobs/{id}": {
+      "delete": {
+        "operationId": "delete-api-jobs-by-id",
+        "parameters": [
+          {
+            "description": "Sliver job ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Sliver job ID",
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {},
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Delete API jobs by ID"
+      }
+    },
+    "/api/listeners": {
+      "post": {
+        "operationId": "post-api-listeners",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListenerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {},
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Post API listeners"
+      }
+    },
+    "/api/listeners/jobs": {
+      "get": {
+        "operationId": "get-api-listeners-jobs",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {},
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get API listeners jobs"
+      }
+    },
+    "/api/loot": {
+      "get": {
+        "operationId": "get-api-loot",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {},
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get API loot"
+      }
+    },
+    "/api/loot/content": {
+      "post": {
+        "operationId": "post-api-loot-content",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {},
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Post API loot content"
+      }
+    },
+    "/api/operators": {
+      "get": {
+        "operationId": "get-api-operators",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {},
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get API operators"
+      }
+    },
+    "/api/rpc/{method}": {
+      "post": {
+        "operationId": "post-api-rpc-by-method",
+        "parameters": [
+          {
+            "description": "Supported raw RPC method",
+            "in": "path",
+            "name": "method",
+            "required": true,
+            "schema": {
+              "description": "Supported raw RPC method",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {},
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Post API RPC by method"
+      }
+    },
+    "/api/session-command": {
+      "post": {
+        "operationId": "post-api-session-command",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionCommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {},
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Post API session command"
+      }
+    },
+    "/api/sessions": {
+      "get": {
+        "operationId": "get-api-sessions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {},
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get API sessions"
+      }
+    },
+    "/api/status": {
+      "get": {
+        "operationId": "get-api-status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get API status"
+      }
+    },
+    "/api/version": {
+      "get": {
+        "operationId": "get-api-version",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {},
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get API version"
+      }
+    }
+  },
+  "servers": [
+    {
+      "description": "Local gateway",
+      "url": "http://localhost:8080"
+    }
+  ]
+}

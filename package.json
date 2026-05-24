@@ -5,10 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:backend": "cd backend && go run ./cmd/sliver-gateway",
+    "dev:full": "npm run build && cd backend && go run ./cmd/sliver-gateway",
+    "generate:openapi": "cd backend && go run ./cmd/openapi > ../openapi/openapi.json",
+    "generate:client": "openapi-typescript openapi/openapi.json -o src/api/schema.ts",
+    "generate:api": "npm run generate:openapi && npm run generate:client",
     "build": "tsc -b && vite build",
+    "build:backend": "cd backend && go test ./...",
+    "check": "npm run generate:api && npm run build && npm run build:backend",
     "preview": "vite preview"
   },
   "dependencies": {
+    "openapi-fetch": "^0.17.0",
     "react": "latest",
     "react-dom": "latest"
   },
@@ -16,6 +24,7 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
+    "openapi-typescript": "^7.13.0",
     "typescript": "latest",
     "vite": "latest"
   }
