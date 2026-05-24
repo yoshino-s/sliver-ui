@@ -64,6 +64,10 @@ Start the frontend and Go gateway concurrently:
 pnpm dev:full
 ```
 
+The frontend always uses the current page origin for Connect RPC. During Vite
+development, `vite.config.ts` proxies the generated Connect RPC paths to the Go
+gateway on `localhost:8080`.
+
 Start the Go gateway:
 
 ```bash

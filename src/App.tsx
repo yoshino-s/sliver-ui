@@ -154,7 +154,6 @@ const commandHelp = [
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [gatewayUrl, setGatewayUrl] = useState("http://localhost:8080");
   const [configInput, setConfigInput] = useState(sampleConfig);
   const [activeSession, setActiveSession] = useState<Session | null>(() =>
     loadStoredSession(),
@@ -182,10 +181,7 @@ function App() {
     "Create a gateway session first, then all calls use generated Connect RPC clients.",
   ]);
 
-  const clients = useMemo(
-    () => createClients(gatewayUrl, activeSession?.id),
-    [gatewayUrl, activeSession?.id],
-  );
+  const clients = useMemo(() => createClients(activeSession?.id), [activeSession?.id]);
 
   const rows = useMemo(
     () => ({
@@ -499,10 +495,8 @@ function App() {
                     <ConnectPage
                       configInput={configInput}
                       createSession={createSession}
-                      gatewayUrl={gatewayUrl}
                       handleConfigFile={handleConfigFile}
                       setConfigInput={setConfigInput}
-                      setGatewayUrl={setGatewayUrl}
                     />
                   }
                 />
@@ -585,17 +579,13 @@ function RequireSession({ connected }: { connected: boolean }) {
 function ConnectPage({
   configInput,
   createSession,
-  gatewayUrl,
   handleConfigFile,
   setConfigInput,
-  setGatewayUrl,
 }: {
   configInput: string;
   createSession: () => void;
-  gatewayUrl: string;
   handleConfigFile: (file: File | null) => void;
   setConfigInput: (value: string) => void;
-  setGatewayUrl: (value: string) => void;
 }) {
   return (
     <Card withBorder radius="lg" p="xl">
@@ -612,11 +602,10 @@ function ConnectPage({
             requests carrying the session id header.
           </Text>
         </Box>
-        <TextInput
-          label="Connect gateway URL"
-          value={gatewayUrl}
-          onChange={(event) => setGatewayUrl(event.currentTarget.value)}
-        />
+        <Text size="sm" c="dimmed">
+          Gateway endpoint: current page origin. In development, Vite proxies
+          Connect RPC calls to the Go gateway.
+        </Text>
         <Group>
           <FileButton onChange={handleConfigFile} accept=".cfg,.json,application/json">
             {(props) => <Button {...props}>Import sliver.cfg</Button>}
@@ -1070,7 +1059,7 @@ function JSONPanel({ data, title }: { data: unknown; title: string }) {
   );
 }
 
-function createClients(baseUrl: string, sessionID?: string) {
+function createClients(sessionID?: string) {
   const interceptors: Interceptor[] = [
     (next) => async (req) => {
       if (sessionID) {
@@ -1080,7 +1069,7 @@ function createClients(baseUrl: string, sessionID?: string) {
     },
   ];
   const transport = createConnectTransport({
-    baseUrl,
+    baseUrl: window.location.origin,
     interceptors,
   });
   return {
