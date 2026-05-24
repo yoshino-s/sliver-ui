@@ -3,14 +3,15 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@10.11.0",
   "scripts": {
     "dev": "vite",
-    "dev:backend": "cd backend && go run ./cmd/sliver-gateway",
-    "dev:full": "npm run build && cd backend && go run ./cmd/sliver-gateway",
+    "dev:backend": "command -v air >/dev/null || go install github.com/air-verse/air@latest; PATH=$PATH:$(go env GOPATH)/bin air -c .air.toml",
+    "dev:full": "concurrently -k -n web,gateway -c cyan,green \"pnpm dev\" \"pnpm dev:backend\"",
     "generate:rpc": "PATH=$PATH:$(go env GOPATH)/bin:./node_modules/.bin buf generate && PATH=$PATH:$(go env GOPATH)/bin buf generate --template buf.gen.gateway.yaml --path proto/gatewaypb/session.proto",
     "build": "tsc -b && vite build",
     "build:backend": "cd backend && go test ./...",
-    "check": "npm run generate:rpc && npm run build && npm run build:backend",
+    "check": "pnpm run generate:rpc && pnpm run build && pnpm run build:backend",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -32,6 +33,7 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
+    "concurrently": "^9.2.1",
     "typescript": "latest",
     "vite": "latest"
   }

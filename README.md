@@ -43,19 +43,25 @@ private keys.
 Install dependencies:
 
 ```bash
-npm install
+pnpm install
 ```
 
 Generate Connect RPC code:
 
 ```bash
-npm run generate:rpc
+pnpm run generate:rpc
 ```
 
 Start the frontend dev server:
 
 ```bash
-npm run dev
+pnpm dev
+```
+
+Start the frontend and Go gateway concurrently:
+
+```bash
+pnpm dev:full
 ```
 
 Start the Go gateway:
@@ -84,7 +90,7 @@ the embedded frontend with files from disk.
 Run all checks:
 
 ```bash
-npm run check
+pnpm check
 ```
 
 The Makefile equivalents are:
@@ -103,7 +109,7 @@ generated directly from the original Sliver protobuf definitions plus the small
 gateway session protobuf definition.
 
 ```bash
-npm run generate:rpc
+pnpm generate:rpc
 ```
 
 The generated files are:
@@ -122,7 +128,7 @@ The gateway can create sessions from the UI by pasting/importing `sliver.cfg`,
 or it can create an initial session on startup:
 
 ```bash
-SLIVER_CONFIG_PATH=/path/to/sliver.cfg npm run dev:backend
+SLIVER_CONFIG_PATH=/path/to/sliver.cfg pnpm dev:backend
 ```
 
 Useful options:

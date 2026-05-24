@@ -5,7 +5,7 @@ BACKEND_BIN := bin/sliver-gateway
 BACKEND_PKG := ./cmd/sliver-gateway
 BACKEND_DIR := backend
 EMBED_DIST := $(BACKEND_DIR)/internal/web/dist
-NPM := npm
+PNPM := pnpm
 GO := go
 AIR := air
 
@@ -34,7 +34,7 @@ help:
 	@echo "  make clean          Remove build artifacts"
 
 install:
-	$(NPM) install
+	$(PNPM) install
 	cd $(BACKEND_DIR) && $(GO) mod tidy
 
 install-tools: install-air
@@ -45,7 +45,7 @@ install-air:
 generate: generate-rpc
 
 generate-rpc:
-	$(NPM) run generate:rpc
+	$(PNPM) run generate:rpc
 
 embed-frontend: build-frontend
 	mkdir -p $(EMBED_DIST)
@@ -57,7 +57,7 @@ build: release
 release: generate-rpc embed-frontend build-backend
 
 build-frontend:
-	$(NPM) run build
+	$(PNPM) run build
 
 build-backend:
 	mkdir -p bin
@@ -69,22 +69,21 @@ test-backend:
 	cd $(BACKEND_DIR) && $(GO) test ./...
 
 check:
-	$(NPM) run check
+	$(PNPM) run check
 
-debug: install-air build-frontend
-	$(AIR) -c .air.toml
+debug: dev-backend
 
 dev:
-	$(NPM) run dev
+	$(PNPM) run dev
 
 dev-backend: install-air
-	$(AIR) -c .air.toml
+	$(PNPM) run dev:backend
 
 dev-full:
-	$(NPM) run dev:full
+	$(PNPM) run dev:full
 
 preview:
-	$(NPM) run preview
+	$(PNPM) run preview
 
 clean:
 	rm -rf dist bin tmp
