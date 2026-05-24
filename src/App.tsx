@@ -2,9 +2,11 @@ import { FormEvent, useMemo, useState } from "react";
 import {
   Navigate,
   NavLink as RouterNavLink,
+  Outlet,
   Route,
   Routes,
   useLocation,
+  useNavigate,
 } from "react-router-dom";
 import {
   AppShell,
@@ -21,7 +23,6 @@ import {
   NavLink,
   NumberInput,
   Paper,
-  PasswordInput,
   ScrollArea,
   Select,
   SimpleGrid,
@@ -30,54 +31,46 @@ import {
   Table,
   Tabs,
   Text,
-  Textarea,
   TextInput,
   Title,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
-import { createApiClient } from "./api/client";
-
-type OperatorConfig = {
-  operator: string;
-  token: string;
-  lhost: string;
-  lport: number;
-  ca_certificate: string;
-  private_key: string;
-  certificate: string;
-};
-
-type ConfigSummary = {
-  operator: string;
-  endpoint: string;
-  hasToken: boolean;
-  hasClientCertificate: boolean;
-  hasPrivateKey: boolean;
-  hasCaCertificate: boolean;
-};
+import { createPromiseClient, type Interceptor } from "@connectrpc/connect";
+import { createConnectTransport } from "@connectrpc/connect-web";
+import type { Message } from "@bufbuild/protobuf";
+import { Empty, Request as SliverRequest } from "./gen/commonpb/common_pb";
+import {
+  DeleteReq,
+  DNSListenerReq,
+  GenerateReq,
+  HTTPListenerReq,
+  ImplantProfile,
+  KillJobReq,
+  Loot,
+  MTLSListenerReq,
+} from "./gen/clientpb/client_pb";
+import {
+  CreateSessionRequest,
+  DeleteSessionRequest,
+  GetSessionRequest,
+  OperatorConfig,
+  Session,
+} from "./gen/gatewaypb/session_pb";
+import { GatewaySessionService } from "./gen/gatewaypb/session_connect";
+import { SliverRPC } from "./gen/rpcpb/services_connect";
+import {
+  CdReq,
+  ExecuteReq,
+  LsReq,
+  Ping,
+  PsReq,
+  PwdReq,
+  ShellReq,
+} from "./gen/sliverpb/sliver_pb";
 
 type ApiData = Record<string, unknown> | unknown[] | null;
 type TableRow = Record<string, unknown>;
-
-type GatewayStatus = {
-  connected?: boolean;
-  operator?: string;
-  endpoint?: string;
-  connectedAt?: string;
-  version?: ApiData;
-};
-
-type DataSets = {
-  version: ApiData;
-  operators: ApiData;
-  sessions: ApiData;
-  beacons: ApiData;
-  jobs: ApiData;
-  loot: ApiData;
-  builds: ApiData;
-  profiles: ApiData;
-};
 
 type ListenerFormValues = {
   protocol: "mtls" | "http" | "https" | "dns";
@@ -97,6 +90,22 @@ type SessionCommandValues = {
   async: boolean;
   output: boolean;
 };
+
+type DataSets = {
+  version: ApiData;
+  operators: ApiData;
+  sessions: ApiData;
+  beacons: ApiData;
+  jobs: ApiData;
+  loot: ApiData;
+  builds: ApiData;
+  profiles: ApiData;
+};
+
+type SliverClients = ReturnType<typeof createClients>;
+
+const sessionHeader = "X-Sliver-Session-Id";
+const storedSessionKey = "sliver-web-session";
 
 const navItems = [
   { path: "/overview", label: "Overview" },
@@ -133,34 +142,34 @@ const sampleConfig = `{
 const commandHelp = [
   "Available commands:",
   "  help       Show available commands",
-  "  connect    Connect using pasted operator config",
-  "  status     Load gateway connection status",
-  "  refresh    Refresh all common resources",
-  "  sessions   List active sessions",
-  "  beacons    List beacons",
-  "  jobs       List jobs and listeners",
-  "  loot       List loot",
-  "  implants   List implant builds",
+  "  refresh    Refresh all common resources via generated Connect RPC",
+  "  sessions   Print cached sessions",
+  "  beacons    Print cached beacons",
+  "  jobs       Print cached jobs",
+  "  loot       Print cached loot",
+  "  implants   Print cached implant builds",
   "  clear      Clear console output",
 ];
 
 function App() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [gatewayUrl, setGatewayUrl] = useState("http://localhost:8080");
   const [configInput, setConfigInput] = useState(sampleConfig);
-  const [configSummary, setConfigSummary] = useState<ConfigSummary | null>(null);
-  const [status, setStatus] = useState<GatewayStatus>({});
+  const [activeSession, setActiveSession] = useState<Session | null>(() =>
+    loadStoredSession(),
+  );
   const [dataSets, setDataSets] = useState<DataSets>(emptyDataSets);
   const [loading, setLoading] = useState("");
   const [rawPayload, setRawPayload] = useState(
     JSON.stringify(
       {
-        config: {
+        Config: {
           GOOS: "linux",
           GOARCH: "amd64",
-          name: "web-generated",
-          isBeacon: false,
-          c2: [{ url: "mtls://127.0.0.1:8888", priority: 1 }],
+          Name: "web-generated",
+          IsBeacon: false,
+          C2: [{ URL: "mtls://127.0.0.1:8888", Priority: 1 }],
         },
       },
       null,
@@ -170,131 +179,119 @@ function App() {
   const [consoleInput, setConsoleInput] = useState("");
   const [consoleLines, setConsoleLines] = useState<string[]>([
     "Sliver Web Client ready.",
-    "Start the Go gateway, connect an operator profile, then use refresh/status commands.",
+    "Create a gateway session first, then all calls use generated Connect RPC clients.",
   ]);
 
-  const api = useMemo(() => createApiClient(gatewayUrl), [gatewayUrl]);
+  const clients = useMemo(
+    () => createClients(gatewayUrl, activeSession?.id),
+    [gatewayUrl, activeSession?.id],
+  );
+
   const rows = useMemo(
     () => ({
-      sessions: extractRows(dataSets.sessions, ["sessions"]),
-      beacons: extractRows(dataSets.beacons, ["beacons"]),
-      jobs: extractRows(dataSets.jobs, ["jobs"]),
-      loot: extractRows(dataSets.loot, ["loot"]),
-      builds: extractRows(dataSets.builds, ["builds", "implantBuilds"]),
-      profiles: extractRows(dataSets.profiles, ["profiles"]),
+      sessions: extractRows(dataSets.sessions, ["Sessions", "sessions"]),
+      beacons: extractRows(dataSets.beacons, ["Beacons", "beacons"]),
+      jobs: extractRows(dataSets.jobs, ["Jobs", "jobs"]),
+      loot: extractRows(dataSets.loot, ["Loot", "loot"]),
+      builds: extractRows(dataSets.builds, ["Builds", "builds", "ImplantBuilds"]),
+      profiles: extractRows(dataSets.profiles, ["Profiles", "profiles"]),
     }),
     [dataSets],
   );
 
-  const connectionTone = status.connected ? "green" : configSummary ? "blue" : "yellow";
-  const connectionLabel = status.connected
-    ? "Connected"
-    : configSummary
-      ? "Ready"
-      : "Config required";
-
-  function parseConfig(value = configInput) {
-    const summary = parseOperatorConfig(value);
-    setConfigSummary(summary);
-    notifications.show({
-      color: "green",
-      title: "Operator config parsed",
-      message: `${summary.operator} @ ${summary.endpoint}`,
+  async function createSession() {
+    await runTask("Creating session", async () => {
+      const config = parseOperatorConfig(configInput);
+      const session = await clients.gateway.createSession(
+        new CreateSessionRequest({ config }),
+      );
+      setActiveSession(session);
+      localStorage.setItem(storedSessionKey, session.toJsonString());
+      notifications.show({
+        color: "green",
+        title: "Sliver session created",
+        message: `${session.operator} @ ${session.endpoint}`,
+      });
+      navigate("/overview", { replace: true });
     });
-    return summary;
+  }
+
+  async function validateStoredSession() {
+    if (!activeSession) {
+      return;
+    }
+    await runTask("Validating session", async () => {
+      const session = await clients.gateway.getSession(
+        new GetSessionRequest({ id: activeSession.id }),
+      );
+      setActiveSession(session);
+      localStorage.setItem(storedSessionKey, session.toJsonString());
+    });
+  }
+
+  async function deleteSession() {
+    if (!activeSession) {
+      return;
+    }
+    await runTask("Deleting session", async () => {
+      await clients.gateway.deleteSession(
+        new DeleteSessionRequest({ id: activeSession.id }),
+      );
+      setActiveSession(null);
+      setDataSets(emptyDataSets);
+      localStorage.removeItem(storedSessionKey);
+      navigate("/connect", { replace: true });
+    });
   }
 
   async function handleConfigFile(file: File | null) {
     if (!file) {
       return;
     }
-    const text = await file.text();
-    setConfigInput(text);
-    try {
-      parseConfig(text);
-    } catch (error) {
-      showError(error);
-    }
-  }
-
-  async function connectGateway() {
-    await runTask("Connecting", async () => {
-      const summary = parseConfig();
-      const result = await api.POST("/api/connect", {
-        body: JSON.parse(configInput),
-      });
-      const data = unwrap<{ status: GatewayStatus }>(result);
-      setStatus(data.status ?? {});
-      appendConsole(`Connected as ${data.status?.operator ?? summary.operator}.`);
-      await refreshAll();
-    });
-  }
-
-  async function disconnectGateway() {
-    await runTask("Disconnecting", async () => {
-      await api.POST("/api/disconnect");
-      setStatus({});
-      setDataSets(emptyDataSets);
-      appendConsole("Disconnected from Sliver gateway.");
-    });
-  }
-
-  async function loadStatus() {
-    await runTask("Loading status", async () => {
-      const result = await api.GET("/api/status");
-      setStatus(unwrap<GatewayStatus>(result));
-    });
+    setConfigInput(await file.text());
   }
 
   async function refreshAll() {
-    await runTask("Refreshing", async () => {
-      const [version, operators, sessions, beacons, jobs, loot, builds, profiles] =
-        await Promise.all([
-          api.GET("/api/version"),
-          api.GET("/api/operators"),
-          api.GET("/api/sessions"),
-          api.GET("/api/beacons"),
-          api.GET("/api/jobs"),
-          api.GET("/api/loot"),
-          api.GET("/api/implants/builds"),
-          api.GET("/api/implants/profiles"),
-        ]);
-
-      setDataSets({
-        version: unwrap<ApiData>(version),
-        operators: unwrap<ApiData>(operators),
-        sessions: unwrap<ApiData>(sessions),
-        beacons: unwrap<ApiData>(beacons),
-        jobs: unwrap<ApiData>(jobs),
-        loot: unwrap<ApiData>(loot),
-        builds: unwrap<ApiData>(builds),
-        profiles: unwrap<ApiData>(profiles),
+    await requireSession(async () => {
+      await runTask("Refreshing", async () => {
+        const [version, operators, sessions, beacons, jobs, loot, builds, profiles] =
+          await Promise.all([
+            clients.sliver.getVersion(new Empty()),
+            clients.sliver.getOperators(new Empty()),
+            clients.sliver.getSessions(new Empty()),
+            clients.sliver.getBeacons(new Empty()),
+            clients.sliver.getJobs(new Empty()),
+            clients.sliver.lootAll(new Empty()),
+            clients.sliver.implantBuilds(new Empty()),
+            clients.sliver.implantProfiles(new Empty()),
+          ]);
+        setDataSets({
+          version: toJson(version),
+          operators: toJson(operators),
+          sessions: toJson(sessions),
+          beacons: toJson(beacons),
+          jobs: toJson(jobs),
+          loot: toJson(loot),
+          builds: toJson(builds),
+          profiles: toJson(profiles),
+        });
+        appendConsole("Refreshed common Sliver resources through Connect RPC.");
       });
-      appendConsole("Refreshed sessions, beacons, jobs, loot, and implants.");
     });
   }
 
   async function refreshJobs() {
-    const result = await api.GET("/api/jobs");
-    setDataSets((current) => ({ ...current, jobs: unwrap<ApiData>(result) }));
+    const jobs = await clients.sliver.getJobs(new Empty());
+    setDataSets((current) => ({ ...current, jobs: toJson(jobs) }));
   }
 
   async function startListener(values: ListenerFormValues) {
-    await runTask("Starting listener", async () => {
-      const result = await api.POST("/api/listeners", {
-        body: {
-          protocol: values.protocol,
-          host: values.host,
-          port: values.port,
-          domain: values.domain || undefined,
-          domains: values.domain ? [values.domain] : undefined,
-          website: values.website || undefined,
-          persistent: values.persistent,
-          enforceOtp: values.enforceOtp,
-        },
+    await requireSession(async () => {
+      await runTask("Starting listener", async () => {
+        const result = await startListenerRPC(clients, values);
+        appendConsole(`Started ${values.protocol} listener: ${formatJSON(toJson(result))}`);
+        await refreshJobs();
       });
-      appendConsole(`Started ${values.protocol} listener: ${formatJSON(unwrap(result))}`);
-      await refreshJobs();
     });
   }
 
@@ -304,60 +301,67 @@ function App() {
       showError(new Error("Job ID is invalid."));
       return;
     }
-    await runTask("Killing job", async () => {
-      await api.DELETE("/api/jobs/{id}", {
-        params: { path: { id: numericID } },
+    await requireSession(async () => {
+      await runTask("Killing job", async () => {
+        await clients.sliver.killJob(new KillJobReq({ ID: numericID }));
+        appendConsole(`Killed job ${numericID}.`);
+        await refreshJobs();
       });
-      appendConsole(`Killed job ${numericID}.`);
-      await refreshJobs();
     });
   }
 
   async function runSessionCommand(values: SessionCommandValues) {
-    await runTask("Running command", async () => {
-      const args = values.args
-        .split(" ")
-        .map((arg) => arg.trim())
-        .filter(Boolean);
-      const result = await api.POST("/api/session-command", {
-        body: {
-          command: values.command,
-          sessionId: values.sessionId,
-          path: values.path || undefined,
-          args,
-          async: values.async,
-          output: values.output,
-        },
+    await requireSession(async () => {
+      await runTask("Running command", async () => {
+        const result = await runSessionCommandRPC(clients, values);
+        appendConsole(formatJSON(toJson(result)));
       });
-      appendConsole(formatJSON(unwrap(result)));
     });
   }
 
   async function generateImplant() {
-    await runTask("Generating implant", async () => {
-      const result = await api.POST("/api/implants/generate", {
-        body: JSON.parse(rawPayload),
+    await requireSession(async () => {
+      await runTask("Generating implant", async () => {
+        const req = GenerateReq.fromJson(JSON.parse(rawPayload), {
+          ignoreUnknownFields: true,
+        } as never);
+        const result = await clients.sliver.generate(req);
+        appendConsole(formatJSON(toJson(result)));
       });
-      appendConsole(formatJSON(unwrap(result)));
     });
   }
 
   async function saveImplantProfile() {
-    await runTask("Saving implant profile", async () => {
-      const result = await api.POST("/api/implants/profiles", {
-        body: JSON.parse(rawPayload),
+    await requireSession(async () => {
+      await runTask("Saving implant profile", async () => {
+        const req = ImplantProfile.fromJson(JSON.parse(rawPayload), {
+          ignoreUnknownFields: true,
+        } as never);
+        const result = await clients.sliver.saveImplantProfile(req);
+        appendConsole(formatJSON(toJson(result)));
       });
-      appendConsole(formatJSON(unwrap(result)));
     });
   }
 
   async function fetchLootContent() {
-    await runTask("Loading loot", async () => {
-      const result = await api.POST("/api/loot/content", {
-        body: JSON.parse(rawPayload),
+    await requireSession(async () => {
+      await runTask("Loading loot", async () => {
+        const req = Loot.fromJson(JSON.parse(rawPayload), {
+          ignoreUnknownFields: true,
+        } as never);
+        const result = await clients.sliver.lootContent(req);
+        appendConsole(formatJSON(toJson(result)));
       });
-      appendConsole(formatJSON(unwrap(result)));
     });
+  }
+
+  async function requireSession(task: () => Promise<void>) {
+    if (!activeSession) {
+      navigate("/connect", { replace: true });
+      showError(new Error("Create a Sliver session first."));
+      return;
+    }
+    await task();
   }
 
   async function runTask(label: string, task: () => Promise<void>) {
@@ -398,35 +402,22 @@ function App() {
       case "help":
         setConsoleLines((current) => [...current, ...commandHelp]);
         return;
-      case "connect":
-        await connectGateway();
-        return;
-      case "status":
-        await loadStatus();
-        appendConsole(formatJSON(status));
-        return;
       case "refresh":
         await refreshAll();
         return;
       case "sessions":
-        await refreshAll();
         appendConsole(formatJSON(dataSets.sessions));
         return;
       case "beacons":
-        await refreshAll();
         appendConsole(formatJSON(dataSets.beacons));
         return;
       case "jobs":
-      case "listeners":
-        await refreshJobs();
         appendConsole(formatJSON(dataSets.jobs));
         return;
       case "loot":
-        await refreshAll();
         appendConsole(formatJSON(dataSets.loot));
         return;
       case "implants":
-        await refreshAll();
         appendConsole(formatJSON(dataSets.builds));
         return;
       default:
@@ -438,12 +429,10 @@ function App() {
     }
   }
 
+  const isConnected = Boolean(activeSession);
+
   return (
-    <AppShell
-      header={{ height: 64 }}
-      navbar={{ width: 280, breakpoint: "sm" }}
-      padding="md"
-    >
+    <AppShell header={{ height: 64 }} navbar={{ width: 280, breakpoint: "sm" }} padding="md">
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
           <Group gap="sm">
@@ -453,12 +442,14 @@ function App() {
             <Box>
               <Title order={3}>Sliver Web Client</Title>
               <Text size="xs" c="dimmed">
-                React Router + Mantine + Go mTLS Gateway
+                Connect RPC Gateway + Mantine + React Router
               </Text>
             </Box>
           </Group>
           <Group>
-            <Badge color={connectionTone}>{connectionLabel}</Badge>
+            <Badge color={isConnected ? "green" : "yellow"}>
+              {isConnected ? "Session active" : "No session"}
+            </Badge>
             {loading ? <Badge color="blue">{loading}...</Badge> : null}
           </Group>
         </Group>
@@ -466,10 +457,18 @@ function App() {
 
       <AppShell.Navbar p="md">
         <Stack gap="xs">
+          <NavLink
+            active={location.pathname === "/connect"}
+            component={RouterNavLink}
+            label="Connect"
+            to="/connect"
+            variant="filled"
+          />
           {navItems.map((item) => (
             <NavLink
               active={location.pathname === item.path}
               component={RouterNavLink}
+              disabled={!isConnected}
               key={item.path}
               label={item.label}
               to={item.path}
@@ -481,58 +480,46 @@ function App() {
 
       <AppShell.Main>
         <Container fluid>
-          <Stack gap="md">
-            <Hero
-              connectGateway={connectGateway}
-              handleConfigFile={handleConfigFile}
-              parseConfig={() => {
-                try {
-                  parseConfig();
-                } catch (error) {
-                  showError(error);
-                }
-              }}
-            />
-
-            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-              <MetricCard label="Sessions" value={rows.sessions.length} />
-              <MetricCard label="Beacons" value={rows.beacons.length} />
-              <MetricCard label="Jobs" value={rows.jobs.length} />
-              <MetricCard
-                label="Operator"
-                value={status.operator ?? configSummary?.operator ?? "Not loaded"}
-              />
-            </SimpleGrid>
-
-            <Grid align="flex-start">
-              <Grid.Col span={{ base: 12, lg: 4 }}>
-                <ConnectionPanel
-                  configInput={configInput}
-                  configSummary={configSummary}
-                  disconnectGateway={disconnectGateway}
-                  gatewayUrl={gatewayUrl}
-                  loadStatus={loadStatus}
+          <Grid align="flex-start">
+            {isConnected ? (
+              <Grid.Col span={{ base: 12, lg: 3 }}>
+                <SessionCard
+                  deleteSession={deleteSession}
                   refreshAll={refreshAll}
-                  setConfigInput={setConfigInput}
-                  setGatewayUrl={setGatewayUrl}
-                  status={status}
-                  submitConfig={() => {
-                    try {
-                      parseConfig();
-                    } catch (error) {
-                      showError(error);
-                    }
-                  }}
-                  connectGateway={connectGateway}
+                  session={activeSession}
+                  validateStoredSession={validateStoredSession}
                 />
               </Grid.Col>
-
-              <Grid.Col span={{ base: 12, lg: 8 }}>
-                <Routes>
-                  <Route path="/" element={<Navigate to="/overview" replace />} />
+            ) : null}
+            <Grid.Col span={{ base: 12, lg: isConnected ? 9 : 12 }}>
+              <Routes>
+                <Route
+                  path="/connect"
+                  element={
+                    <ConnectPage
+                      configInput={configInput}
+                      createSession={createSession}
+                      gatewayUrl={gatewayUrl}
+                      handleConfigFile={handleConfigFile}
+                      setConfigInput={setConfigInput}
+                      setGatewayUrl={setGatewayUrl}
+                    />
+                  }
+                />
+                <Route
+                  path="/"
+                  element={<Navigate to={isConnected ? "/overview" : "/connect"} replace />}
+                />
+                <Route element={<RequireSession connected={isConnected} />}>
                   <Route
                     path="/overview"
-                    element={<OverviewPage dataSets={dataSets} status={status} />}
+                    element={
+                      <OverviewPage
+                        dataSets={dataSets}
+                        rows={rows}
+                        session={activeSession}
+                      />
+                    }
                   />
                   <Route
                     path="/implants"
@@ -550,26 +537,15 @@ function App() {
                   <Route
                     path="/sessions"
                     element={
-                      <SessionsPage
-                        rows={rows.sessions}
-                        runSessionCommand={runSessionCommand}
-                      />
+                      <SessionsPage rows={rows.sessions} runSessionCommand={runSessionCommand} />
                     }
                   />
                   <Route path="/beacons" element={<DataPage rows={rows.beacons} />} />
                   <Route
                     path="/listeners"
-                    element={
-                      <ListenersPage
-                        jobRows={rows.jobs}
-                        startListener={startListener}
-                      />
-                    }
+                    element={<ListenersPage jobRows={rows.jobs} startListener={startListener} />}
                   />
-                  <Route
-                    path="/jobs"
-                    element={<JobsPage killJob={killJob} rows={rows.jobs} />}
-                  />
+                  <Route path="/jobs" element={<JobsPage killJob={killJob} rows={rows.jobs} />} />
                   <Route
                     path="/loot"
                     element={
@@ -592,151 +568,106 @@ function App() {
                       />
                     }
                   />
-                </Routes>
-              </Grid.Col>
-            </Grid>
-          </Stack>
+                </Route>
+              </Routes>
+            </Grid.Col>
+          </Grid>
         </Container>
       </AppShell.Main>
     </AppShell>
   );
 }
 
-function Hero({
-  connectGateway,
+function RequireSession({ connected }: { connected: boolean }) {
+  return connected ? <Outlet /> : <Navigate to="/connect" replace />;
+}
+
+function ConnectPage({
+  configInput,
+  createSession,
+  gatewayUrl,
   handleConfigFile,
-  parseConfig,
+  setConfigInput,
+  setGatewayUrl,
 }: {
-  connectGateway: () => void;
+  configInput: string;
+  createSession: () => void;
+  gatewayUrl: string;
   handleConfigFile: (file: File | null) => void;
-  parseConfig: () => void;
+  setConfigInput: (value: string) => void;
+  setGatewayUrl: (value: string) => void;
 }) {
   return (
     <Card withBorder radius="lg" p="xl">
-      <Group justify="space-between" align="flex-start">
-        <Box maw={760}>
+      <Stack>
+        <Box>
           <Text tt="uppercase" fw={800} size="xs" c="cyan">
-            Operator workspace
+            Gateway session
           </Text>
-          <Title order={1}>Sliver client experience for the browser</Title>
+          <Title order={1}>Create a Sliver session first</Title>
           <Text c="dimmed" mt="sm">
-            Import an operator profile, connect the Go gateway, and manage
-            implants, sessions, beacons, listeners, jobs, loot, and command
-            workflows through Mantine pages backed by generated API clients.
+            Paste or import a Sliver operator config. The gateway validates the
+            config by opening the native mTLS gRPC client and calling
+            GetVersion. After success, all Sliver calls are generated Connect RPC
+            requests carrying the session id header.
           </Text>
         </Box>
+        <TextInput
+          label="Connect gateway URL"
+          value={gatewayUrl}
+          onChange={(event) => setGatewayUrl(event.currentTarget.value)}
+        />
         <Group>
           <FileButton onChange={handleConfigFile} accept=".cfg,.json,application/json">
             {(props) => <Button {...props}>Import sliver.cfg</Button>}
           </FileButton>
-          <Button variant="light" onClick={parseConfig}>
-            Parse config
-          </Button>
-          <Button onClick={connectGateway}>Connect</Button>
+          <Button onClick={createSession}>Validate and create session</Button>
         </Group>
-      </Group>
+        <JsonInput
+          autosize
+          formatOnBlur
+          minRows={16}
+          label="Operator config JSON"
+          validationError="Invalid JSON"
+          value={configInput}
+          onChange={setConfigInput}
+        />
+      </Stack>
     </Card>
   );
 }
 
-function MetricCard({ label, value }: { label: string; value: number | string }) {
-  return (
-    <Card withBorder radius="md">
-      <Text size="sm" c="dimmed">
-        {label}
-      </Text>
-      <Title order={2} lineClamp={1}>
-        {value}
-      </Title>
-    </Card>
-  );
-}
-
-function ConnectionPanel({
-  configInput,
-  configSummary,
-  connectGateway,
-  disconnectGateway,
-  gatewayUrl,
-  loadStatus,
+function SessionCard({
+  deleteSession,
   refreshAll,
-  setConfigInput,
-  setGatewayUrl,
-  status,
-  submitConfig,
+  session,
+  validateStoredSession,
 }: {
-  configInput: string;
-  configSummary: ConfigSummary | null;
-  connectGateway: () => void;
-  disconnectGateway: () => void;
-  gatewayUrl: string;
-  loadStatus: () => void;
+  deleteSession: () => void;
   refreshAll: () => void;
-  setConfigInput: (value: string) => void;
-  setGatewayUrl: (value: string) => void;
-  status: GatewayStatus;
-  submitConfig: () => void;
+  session: Session | null;
+  validateStoredSession: () => void;
 }) {
   return (
     <Card withBorder radius="lg">
       <Stack>
         <Group justify="space-between">
-          <Box>
-            <Text tt="uppercase" fw={800} size="xs" c="cyan">
-              Gateway setup
-            </Text>
-            <Title order={3}>Operator configuration</Title>
-          </Box>
-          <Badge color={status.connected ? "green" : "yellow"}>
-            {status.connected ? "Connected" : "Waiting"}
-          </Badge>
+          <Title order={4}>Active session</Title>
+          <Badge color="green">Connected</Badge>
         </Group>
-
-        <TextInput
-          label="Go gateway URL"
-          placeholder="http://localhost:8080"
-          value={gatewayUrl}
-          onChange={(event) => setGatewayUrl(event.currentTarget.value)}
-        />
-        <Textarea
-          autosize
-          minRows={10}
-          label="Operator config JSON"
-          value={configInput}
-          onChange={(event) => setConfigInput(event.currentTarget.value)}
-        />
+        <Summary label="Session ID" value={session?.id ?? "-"} />
+        <Summary label="Operator" value={session?.operator ?? "-"} />
+        <Summary label="Endpoint" value={session?.endpoint ?? "-"} />
+        <Summary label="Version" value={session?.version ?? "-"} />
         <Group grow>
-          <Button variant="light" onClick={submitConfig}>
-            Parse
+          <Button variant="default" onClick={validateStoredSession}>
+            Validate
           </Button>
-          <Button onClick={connectGateway}>Connect</Button>
+          <Button onClick={refreshAll}>Refresh</Button>
         </Group>
-        <Group grow>
-          <Button variant="default" onClick={loadStatus}>
-            Status
-          </Button>
-          <Button variant="default" onClick={refreshAll}>
-            Refresh
-          </Button>
-          <Button color="red" variant="light" onClick={disconnectGateway}>
-            Disconnect
-          </Button>
-        </Group>
-
-        <SimpleGrid cols={2}>
-          <Summary label="Connected" value={status.connected ? "yes" : "no"} />
-          <Summary label="Operator" value={status.operator ?? configSummary?.operator ?? "-"} />
-          <Summary
-            label="RPC endpoint"
-            value={status.endpoint ?? configSummary?.endpoint ?? "-"}
-          />
-          <Summary label="Token" value={configSummary?.hasToken ? "loaded" : "missing"} />
-          <Summary
-            label="Client cert"
-            value={configSummary?.hasClientCertificate ? "loaded" : "missing"}
-          />
-          <Summary label="Private key" value={configSummary?.hasPrivateKey ? "loaded" : "missing"} />
-        </SimpleGrid>
+        <Button color="red" variant="light" onClick={deleteSession}>
+          Delete session
+        </Button>
       </Stack>
     </Card>
   );
@@ -757,40 +688,67 @@ function Summary({ label, value }: { label: string; value: string }) {
 
 function OverviewPage({
   dataSets,
-  status,
+  rows,
+  session,
 }: {
   dataSets: DataSets;
-  status: GatewayStatus;
+  rows: {
+    sessions: TableRow[];
+    beacons: TableRow[];
+    jobs: TableRow[];
+    loot: TableRow[];
+    builds: TableRow[];
+    profiles: TableRow[];
+  };
+  session: Session | null;
 }) {
   return (
     <Stack>
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
+        <MetricCard label="Sessions" value={rows.sessions.length} />
+        <MetricCard label="Beacons" value={rows.beacons.length} />
+        <MetricCard label="Jobs" value={rows.jobs.length} />
+        <MetricCard label="Operator" value={session?.operator ?? "Not loaded"} />
+      </SimpleGrid>
       <SimpleGrid cols={{ base: 1, md: 3 }}>
         <Card withBorder radius="lg">
-          <Title order={4}>mTLS gateway</Title>
+          <Title order={4}>Connect RPC only</Title>
           <Text c="dimmed" mt="xs">
-            Browser requests are routed to Go, while Go owns the Sliver mTLS gRPC
-            client and forwards common operator workflows.
+            Sliver methods are generated from the original protobuf service and
+            forwarded method-by-method to the mTLS gRPC client.
           </Text>
         </Card>
         <Card withBorder radius="lg">
-          <Title order={4}>Generated API contract</Title>
+          <Title order={4}>Thin gateway</Title>
           <Text c="dimmed" mt="xs">
-            Huma generates OpenAPI from route types, and openapi-typescript
-            generates frontend API types from the same spec.
+            The gateway only creates sessions from operator configs and proxies
+            Connect RPC calls using the session header.
           </Text>
         </Card>
         <Card withBorder radius="lg">
-          <Title order={4}>Router pages</Title>
+          <Title order={4}>Validated config</Title>
           <Text c="dimmed" mt="xs">
-            React Router owns navigation for overview, implants, sessions,
-            beacons, listeners, jobs, loot, and console pages.
+            Session creation fails unless the config can connect to Sliver and
+            complete GetVersion successfully.
           </Text>
         </Card>
       </SimpleGrid>
-      <JSONPanel title="Gateway status" data={status} />
       <JSONPanel title="Version" data={dataSets.version} />
       <JSONPanel title="Operators" data={dataSets.operators} />
     </Stack>
+  );
+}
+
+function MetricCard({ label, value }: { label: string; value: number | string }) {
+  return (
+    <Card withBorder radius="md">
+      <Text size="sm" c="dimmed">
+        {label}
+      </Text>
+      <Title order={2} lineClamp={1}>
+        {value}
+      </Title>
+    </Card>
   );
 }
 
@@ -815,7 +773,7 @@ function ImplantsPage({
         <Tabs.List>
           <Tabs.Tab value="builds">Builds</Tabs.Tab>
           <Tabs.Tab value="profiles">Profiles</Tabs.Tab>
-          <Tabs.Tab value="payload">Generate / Profile Payload</Tabs.Tab>
+          <Tabs.Tab value="payload">Generated RPC Payload</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="builds" pt="md">
           <DataTable rows={buildRows} />
@@ -829,7 +787,7 @@ function ImplantsPage({
               autosize
               formatOnBlur
               minRows={14}
-              label="Raw Sliver GenerateReq / ImplantProfile payload"
+              label="GenerateReq / ImplantProfile JSON"
               validationError="Invalid JSON"
               value={rawPayload}
               onChange={setRawPayload}
@@ -871,7 +829,7 @@ function SessionsPage({
       <Card withBorder radius="lg">
         <form onSubmit={form.onSubmit(runSessionCommand)}>
           <Stack>
-            <Title order={4}>Run session command</Title>
+            <Title order={4}>Run generated session RPC</Title>
             <SimpleGrid cols={{ base: 1, md: 2 }}>
               <Select
                 label="Command"
@@ -929,7 +887,7 @@ function ListenersPage({
       <Card withBorder radius="lg">
         <form onSubmit={form.onSubmit(startListener)}>
           <Stack>
-            <Title order={4}>Start listener</Title>
+            <Title order={4}>Start listener via generated RPC</Title>
             <SimpleGrid cols={{ base: 1, md: 2 }}>
               <Select
                 label="Protocol"
@@ -984,11 +942,11 @@ function JobsPage({
         {rows.slice(0, 8).map((row) => (
           <Button
             color="red"
-            key={String(row.id ?? row.ID)}
-            onClick={() => killJob(row.id ?? row.ID)}
+            key={String(row.ID ?? row.id)}
+            onClick={() => killJob(row.ID ?? row.id)}
             variant="light"
           >
-            Kill job {String(row.id ?? row.ID)}
+            Kill job {String(row.ID ?? row.id)}
           </Button>
         ))}
       </Group>
@@ -1014,7 +972,7 @@ function LootPage({
         autosize
         formatOnBlur
         minRows={10}
-        label="Loot content payload"
+        label="Loot JSON payload"
         validationError="Invalid JSON"
         value={rawPayload}
         onChange={setRawPayload}
@@ -1032,7 +990,7 @@ function DataTable({ rows }: { rows: TableRow[] }) {
   if (rows.length === 0) {
     return (
       <Card withBorder radius="lg">
-        <Text c="dimmed">No data available. Connect and refresh first.</Text>
+        <Text c="dimmed">No data available. Create a session and refresh first.</Text>
       </Card>
     );
   }
@@ -1112,52 +1070,144 @@ function JSONPanel({ data, title }: { data: unknown; title: string }) {
   );
 }
 
-function parseOperatorConfig(input: string): ConfigSummary {
-  const parsed = JSON.parse(input) as Partial<OperatorConfig>;
-  const requiredFields: Array<keyof OperatorConfig> = [
-    "operator",
-    "token",
-    "lhost",
-    "lport",
-    "ca_certificate",
-    "private_key",
-    "certificate",
+function createClients(baseUrl: string, sessionID?: string) {
+  const interceptors: Interceptor[] = [
+    (next) => async (req) => {
+      if (sessionID) {
+        req.header.set(sessionHeader, sessionID);
+      }
+      return next(req);
+    },
   ];
-
-  for (const field of requiredFields) {
-    if (!parsed[field]) {
-      throw new Error(`Missing required field: ${field}`);
-    }
-  }
-
-  if (typeof parsed.operator !== "string") {
-    throw new Error("operator must be a string");
-  }
-  if (typeof parsed.lhost !== "string") {
-    throw new Error("lhost must be a string");
-  }
-  if (typeof parsed.lport !== "number") {
-    throw new Error("lport must be a number");
-  }
-
+  const transport = createConnectTransport({
+    baseUrl,
+    interceptors,
+  });
   return {
-    operator: parsed.operator,
-    endpoint: `${parsed.lhost}:${parsed.lport}`,
-    hasToken: Boolean(parsed.token),
-    hasClientCertificate: Boolean(parsed.certificate),
-    hasPrivateKey: Boolean(parsed.private_key),
-    hasCaCertificate: Boolean(parsed.ca_certificate),
+    gateway: createPromiseClient(GatewaySessionService, transport),
+    sliver: createPromiseClient(SliverRPC, transport),
   };
 }
 
-function unwrap<T>(result: { data?: unknown; error?: unknown; response: Response }): T {
-  if (result.error) {
-    throw new Error(formatJSON(result.error));
+function parseOperatorConfig(input: string): OperatorConfig {
+  const parsed = JSON.parse(input) as Record<string, unknown>;
+  const config = new OperatorConfig({
+    operator: stringField(parsed, "operator"),
+    token: stringField(parsed, "token"),
+    lhost: stringField(parsed, "lhost"),
+    lport: numberField(parsed, "lport"),
+    caCertificate: stringField(parsed, "ca_certificate"),
+    privateKey: stringField(parsed, "private_key"),
+    certificate: stringField(parsed, "certificate"),
+  });
+  return config;
+}
+
+function stringField(value: Record<string, unknown>, key: string) {
+  const field = value[key];
+  if (typeof field !== "string" || !field) {
+    throw new Error(`${key} is required`);
   }
-  if (!result.response.ok) {
-    throw new Error(`HTTP ${result.response.status}`);
+  return field;
+}
+
+function numberField(value: Record<string, unknown>, key: string) {
+  const field = value[key];
+  if (typeof field !== "number" || field <= 0) {
+    throw new Error(`${key} must be a positive number`);
   }
-  return result.data as T;
+  return field;
+}
+
+async function startListenerRPC(clients: SliverClients, values: ListenerFormValues) {
+  switch (values.protocol) {
+    case "mtls":
+      return clients.sliver.startMTLSListener(
+        new MTLSListenerReq({
+          Host: values.host,
+          Port: values.port,
+          Persistent: values.persistent,
+        }),
+      );
+    case "http":
+      return clients.sliver.startHTTPListener(newHTTPListenerReq(values, false));
+    case "https":
+      return clients.sliver.startHTTPSListener(newHTTPListenerReq(values, true));
+    case "dns":
+      return clients.sliver.startDNSListener(
+        new DNSListenerReq({
+          Host: values.host,
+          Port: values.port,
+          Domains: values.domain ? [values.domain] : [],
+          Persistent: values.persistent,
+          EnforceOTP: values.enforceOtp,
+        }),
+      );
+  }
+}
+
+function newHTTPListenerReq(values: ListenerFormValues, secure: boolean) {
+  return new HTTPListenerReq({
+    Host: values.host,
+    Port: values.port,
+    Domain: values.domain,
+    Website: values.website,
+    Secure: secure,
+    Persistent: values.persistent,
+    EnforceOTP: values.enforceOtp,
+  });
+}
+
+async function runSessionCommandRPC(clients: SliverClients, values: SessionCommandValues) {
+  const request = new SliverRequest({
+    Async: values.async,
+    SessionID: values.sessionId,
+  });
+  const args = values.args
+    .split(" ")
+    .map((arg) => arg.trim())
+    .filter(Boolean);
+
+  switch (values.command) {
+    case "ping":
+      return clients.sliver.ping(new Ping({ Nonce: Date.now() % 2147483647, Request: request }));
+    case "ps":
+      return clients.sliver.ps(new PsReq({ Request: request }));
+    case "pwd":
+      return clients.sliver.pwd(new PwdReq({ Request: request }));
+    case "ls":
+      return clients.sliver.ls(new LsReq({ Path: values.path, Request: request }));
+    case "cd":
+      return clients.sliver.cd(new CdReq({ Path: values.path, Request: request }));
+    case "execute":
+      return clients.sliver.execute(
+        new ExecuteReq({
+          Path: values.path,
+          Args: args,
+          Output: values.output,
+          Request: request,
+        }),
+      );
+    case "shell":
+      return clients.sliver.shell(new ShellReq({ Path: values.path, Request: request }));
+  }
+}
+
+function loadStoredSession() {
+  const stored = localStorage.getItem(storedSessionKey);
+  if (!stored) {
+    return null;
+  }
+  try {
+    return Session.fromJsonString(stored);
+  } catch {
+    localStorage.removeItem(storedSessionKey);
+    return null;
+  }
+}
+
+function toJson(message: Message) {
+  return message.toJson({ emitDefaultValues: false }) as ApiData;
 }
 
 function extractRows(data: ApiData, preferredKeys: string[]): TableRow[] {

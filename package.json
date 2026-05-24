@@ -7,30 +7,31 @@
     "dev": "vite",
     "dev:backend": "cd backend && go run ./cmd/sliver-gateway",
     "dev:full": "npm run build && cd backend && go run ./cmd/sliver-gateway",
-    "generate:openapi": "cd backend && go run ./cmd/openapi > ../openapi/openapi.json",
-    "generate:client": "openapi-typescript openapi/openapi.json -o src/api/schema.ts",
-    "generate:api": "npm run generate:openapi && npm run generate:client",
+    "generate:rpc": "PATH=$PATH:$(go env GOPATH)/bin:./node_modules/.bin buf generate && PATH=$PATH:$(go env GOPATH)/bin buf generate --template buf.gen.gateway.yaml --path proto/gatewaypb/session.proto",
     "build": "tsc -b && vite build",
     "build:backend": "cd backend && go test ./...",
-    "check": "npm run generate:api && npm run build && npm run build:backend",
+    "check": "npm run generate:rpc && npm run build && npm run build:backend",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@bufbuild/protobuf": "^1.10.1",
+    "@connectrpc/connect": "^1.7.0",
+    "@connectrpc/connect-web": "^1.7.0",
     "@mantine/core": "^9.2.1",
     "@mantine/form": "^9.2.1",
     "@mantine/hooks": "^9.2.1",
     "@mantine/notifications": "^9.2.1",
-    "openapi-fetch": "^0.17.0",
     "react": "latest",
     "react-dom": "latest",
     "react-router-dom": "^7.15.1",
     "tslib": "^2.8.1"
   },
   "devDependencies": {
+    "@bufbuild/protoc-gen-es": "^1.10.1",
+    "@connectrpc/protoc-gen-connect-es": "^1.7.0",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
-    "openapi-typescript": "^7.13.0",
     "typescript": "latest",
     "vite": "latest"
   }

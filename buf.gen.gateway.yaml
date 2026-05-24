@@ -1,0 +1,10 @@
+version: v2
+plugins:
+  - local: protoc-gen-go
+    out: backend/internal/generated
+    opt:
+      - paths=source_relative
+  - local: protoc-gen-connect-go
+    out: backend/internal/generated/connect
+    opt:
+      - paths=source_relative

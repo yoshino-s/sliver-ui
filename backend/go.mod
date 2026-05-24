@@ -3,8 +3,8 @@ module sliver-web-client/backend
 go 1.25.7
 
 require (
+	connectrpc.com/connect v1.20.0
 	github.com/bishopfox/sliver v1.15.16
-	github.com/danielgtaylor/huma/v2 v2.38.0
 	google.golang.org/grpc v1.42.0-dev.0.20211020220737-f00baa6c3c84
 	google.golang.org/protobuf v1.36.11
 )

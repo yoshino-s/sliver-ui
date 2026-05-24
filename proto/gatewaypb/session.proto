@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package gatewaypb;
+
+option go_package = "sliver-web-client/backend/internal/generated/gatewaypb";
+
+message OperatorConfig {
+  string operator = 1;
+  string token = 2;
+  string lhost = 3;
+  int32 lport = 4;
+  string ca_certificate = 5;
+  string private_key = 6;
+  string certificate = 7;
+}
+
+message CreateSessionRequest {
+  OperatorConfig config = 1;
+}
+
+message Session {
+  string id = 1;
+  string operator = 2;
+  string endpoint = 3;
+  string connected_at = 4;
+  string version = 5;
+}
+
+message GetSessionRequest {
+  string id = 1;
+}
+
+message DeleteSessionRequest {
+  string id = 1;
+}
+
+message DeleteSessionResponse {}
+
+service GatewaySessionService {
+  rpc CreateSession(CreateSessionRequest) returns (Session);
+  rpc GetSession(GetSessionRequest) returns (Session);
+  rpc DeleteSession(DeleteSessionRequest) returns (DeleteSessionResponse);
+}

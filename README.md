@@ -1,11 +1,11 @@
 # Sliver Web Client
 
-A browser-based Sliver client built with a Go mTLS gateway plus a Vite, React,
-and TypeScript frontend. It provides a web dashboard for common `sliver-client`
-workflows:
+A browser-based Sliver client built with a thin Go Connect RPC gateway plus a
+Vite, React Router, Mantine, and TypeScript frontend. It provides a web
+dashboard for common `sliver-client` workflows:
 
 - operator profile import
-- mTLS gateway connection setup
+- Connect RPC gateway session setup
 - implant build/profile inventory and generation requests
 - session and beacon overview
 - common session commands
@@ -17,9 +17,15 @@ workflows:
 ## Security model
 
 The native Sliver client uses a token plus client certificates/private keys to
-open an mTLS-backed RPC channel. A browser should not own that raw channel or
-persist operator secrets. The browser sends the imported `sliver.cfg` to the Go
-gateway, and the gateway owns the native Sliver mTLS gRPC connection in memory.
+open an mTLS-backed gRPC channel. A browser should not own that raw channel or
+persist operator secrets. The browser sends the imported `sliver.cfg` to the
+gateway session service, and the gateway validates the config by opening the
+native Sliver mTLS gRPC client and calling `GetVersion`.
+
+After a session is created, the frontend calls generated Connect RPC clients for
+the original Sliver protobuf service. The gateway forwards those generated
+Connect requests to the session's Sliver gRPC client using the
+`X-Sliver-Session-Id` header.
 
 For production use, run the gateway only on a trusted host/network and add
 deployment controls appropriate for your environment:
@@ -40,10 +46,10 @@ Install dependencies:
 npm install
 ```
 
-Generate the OpenAPI document and TypeScript API client:
+Generate Connect RPC code:
 
 ```bash
-npm run generate:api
+npm run generate:rpc
 ```
 
 Start the frontend dev server:
@@ -76,28 +82,30 @@ Run all checks:
 npm run check
 ```
 
-## API documentation and client generation
+## Connect RPC generation
 
-The Go API is defined with Huma route/input/output types. The gateway exposes
-OpenAPI automatically at runtime, and the repository can also generate a static
-spec:
+The gateway does not define a handwritten REST API. Sliver RPC bindings are
+generated directly from the original Sliver protobuf definitions plus the small
+gateway session protobuf definition.
 
 ```bash
-npm run generate:openapi
+npm run generate:rpc
 ```
 
 The generated files are:
 
-- `openapi/openapi.json`
-- `src/api/schema.ts`
+- `backend/internal/generated/connect/rpcpb/rpcpbconnect/services.connect.go`
+- `backend/internal/generated/connect/gatewaypb/gatewaypbconnect/session.connect.go`
+- `backend/internal/generated/gatewaypb/session.pb.go`
+- `src/gen/**`
 
-The frontend client wrapper lives in `src/api/client.ts` and uses
-`openapi-fetch` with the generated `paths` type.
+The frontend uses `@connectrpc/connect-web` and generated `SliverRPC` /
+`GatewaySessionService` clients.
 
 ## Gateway configuration
 
-The gateway can connect from the UI by pasting/importing `sliver.cfg`, or it can
-load a config on startup:
+The gateway can create sessions from the UI by pasting/importing `sliver.cfg`,
+or it can create an initial session on startup:
 
 ```bash
 SLIVER_CONFIG_PATH=/path/to/sliver.cfg npm run dev:backend
