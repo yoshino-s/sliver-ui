@@ -1,15 +1,42 @@
 import { FormEvent, useMemo, useState } from "react";
+import {
+  Navigate,
+  NavLink as RouterNavLink,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router-dom";
+import {
+  AppShell,
+  Badge,
+  Box,
+  Button,
+  Card,
+  Code,
+  Container,
+  FileButton,
+  Grid,
+  Group,
+  JsonInput,
+  NavLink,
+  NumberInput,
+  Paper,
+  PasswordInput,
+  ScrollArea,
+  Select,
+  SimpleGrid,
+  Stack,
+  Switch,
+  Table,
+  Tabs,
+  Text,
+  Textarea,
+  TextInput,
+  Title,
+} from "@mantine/core";
+import { useForm } from "@mantine/form";
+import { notifications } from "@mantine/notifications";
 import { createApiClient } from "./api/client";
-
-type NavItemKey =
-  | "overview"
-  | "implants"
-  | "sessions"
-  | "beacons"
-  | "listeners"
-  | "jobs"
-  | "loot"
-  | "console";
 
 type OperatorConfig = {
   operator: string;
@@ -41,25 +68,6 @@ type GatewayStatus = {
   version?: ApiData;
 };
 
-type ListenerForm = {
-  protocol: "mtls" | "http" | "https" | "dns";
-  host: string;
-  port: string;
-  domain: string;
-  website: string;
-  persistent: boolean;
-  enforceOtp: boolean;
-};
-
-type SessionCommandForm = {
-  command: "ping" | "ps" | "pwd" | "ls" | "cd" | "execute" | "shell";
-  sessionId: string;
-  path: string;
-  args: string;
-  async: boolean;
-  output: boolean;
-};
-
 type DataSets = {
   version: ApiData;
   operators: ApiData;
@@ -71,16 +79,46 @@ type DataSets = {
   profiles: ApiData;
 };
 
-const navItems: Array<{ key: NavItemKey; label: string }> = [
-  { key: "overview", label: "Overview" },
-  { key: "implants", label: "Implants" },
-  { key: "sessions", label: "Sessions" },
-  { key: "beacons", label: "Beacons" },
-  { key: "listeners", label: "Listeners" },
-  { key: "jobs", label: "Jobs" },
-  { key: "loot", label: "Loot" },
-  { key: "console", label: "Console" },
+type ListenerFormValues = {
+  protocol: "mtls" | "http" | "https" | "dns";
+  host: string;
+  port: number;
+  domain: string;
+  website: string;
+  persistent: boolean;
+  enforceOtp: boolean;
+};
+
+type SessionCommandValues = {
+  command: "ping" | "ps" | "pwd" | "ls" | "cd" | "execute" | "shell";
+  sessionId: string;
+  path: string;
+  args: string;
+  async: boolean;
+  output: boolean;
+};
+
+const navItems = [
+  { path: "/overview", label: "Overview" },
+  { path: "/implants", label: "Implants" },
+  { path: "/sessions", label: "Sessions" },
+  { path: "/beacons", label: "Beacons" },
+  { path: "/listeners", label: "Listeners" },
+  { path: "/jobs", label: "Jobs" },
+  { path: "/loot", label: "Loot" },
+  { path: "/console", label: "Console" },
 ];
+
+const emptyDataSets: DataSets = {
+  version: null,
+  operators: null,
+  sessions: null,
+  beacons: null,
+  jobs: null,
+  loot: null,
+  builds: null,
+  profiles: null,
+};
 
 const sampleConfig = `{
   "operator": "alice",
@@ -106,83 +144,14 @@ const commandHelp = [
   "  clear      Clear console output",
 ];
 
-const emptyDataSets: DataSets = {
-  version: null,
-  operators: null,
-  sessions: null,
-  beacons: null,
-  jobs: null,
-  loot: null,
-  builds: null,
-  profiles: null,
-};
-
-function parseOperatorConfig(input: string): ConfigSummary {
-  const parsed = JSON.parse(input) as Partial<OperatorConfig>;
-  const requiredFields: Array<keyof OperatorConfig> = [
-    "operator",
-    "token",
-    "lhost",
-    "lport",
-    "ca_certificate",
-    "private_key",
-    "certificate",
-  ];
-
-  for (const field of requiredFields) {
-    if (!parsed[field]) {
-      throw new Error(`Missing required field: ${field}`);
-    }
-  }
-
-  if (typeof parsed.operator !== "string") {
-    throw new Error("operator must be a string");
-  }
-  if (typeof parsed.lhost !== "string") {
-    throw new Error("lhost must be a string");
-  }
-  if (typeof parsed.lport !== "number") {
-    throw new Error("lport must be a number");
-  }
-
-  return {
-    operator: parsed.operator,
-    endpoint: `${parsed.lhost}:${parsed.lport}`,
-    hasToken: Boolean(parsed.token),
-    hasClientCertificate: Boolean(parsed.certificate),
-    hasPrivateKey: Boolean(parsed.private_key),
-    hasCaCertificate: Boolean(parsed.ca_certificate),
-  };
-}
-
 function App() {
-  const [activeNav, setActiveNav] = useState<NavItemKey>("overview");
+  const location = useLocation();
   const [gatewayUrl, setGatewayUrl] = useState("http://localhost:8080");
   const [configInput, setConfigInput] = useState(sampleConfig);
   const [configSummary, setConfigSummary] = useState<ConfigSummary | null>(null);
-  const [configError, setConfigError] = useState("");
   const [status, setStatus] = useState<GatewayStatus>({});
   const [dataSets, setDataSets] = useState<DataSets>(emptyDataSets);
   const [loading, setLoading] = useState("");
-  const [apiError, setApiError] = useState("");
-  const [listenerForm, setListenerForm] = useState<ListenerForm>({
-    protocol: "mtls",
-    host: "0.0.0.0",
-    port: "8888",
-    domain: "",
-    website: "",
-    persistent: false,
-    enforceOtp: false,
-  });
-  const [sessionCommandForm, setSessionCommandForm] =
-    useState<SessionCommandForm>({
-      command: "ping",
-      sessionId: "",
-      path: "",
-      args: "",
-      async: false,
-      output: true,
-    });
   const [rawPayload, setRawPayload] = useState(
     JSON.stringify(
       {
@@ -205,43 +174,34 @@ function App() {
   ]);
 
   const api = useMemo(() => createApiClient(gatewayUrl), [gatewayUrl]);
-  const sessionRows = useMemo(
-    () => extractRows(dataSets.sessions, ["sessions"]),
-    [dataSets.sessions],
-  );
-  const beaconRows = useMemo(
-    () => extractRows(dataSets.beacons, ["beacons"]),
-    [dataSets.beacons],
-  );
-  const jobRows = useMemo(() => extractRows(dataSets.jobs, ["jobs"]), [dataSets.jobs]);
-  const lootRows = useMemo(() => extractRows(dataSets.loot, ["loot"]), [dataSets.loot]);
-  const buildRows = useMemo(
-    () => extractRows(dataSets.builds, ["builds", "implantBuilds"]),
-    [dataSets.builds],
-  );
-  const profileRows = useMemo(
-    () => extractRows(dataSets.profiles, ["profiles"]),
-    [dataSets.profiles],
+  const rows = useMemo(
+    () => ({
+      sessions: extractRows(dataSets.sessions, ["sessions"]),
+      beacons: extractRows(dataSets.beacons, ["beacons"]),
+      jobs: extractRows(dataSets.jobs, ["jobs"]),
+      loot: extractRows(dataSets.loot, ["loot"]),
+      builds: extractRows(dataSets.builds, ["builds", "implantBuilds"]),
+      profiles: extractRows(dataSets.profiles, ["profiles"]),
+    }),
+    [dataSets],
   );
 
-  const gatewayState = useMemo(() => {
-    if (status.connected) {
-      return { label: "Connected", tone: "success" };
-    }
-    if (!configSummary) {
-      return { label: "Config required", tone: "warning" };
-    }
-    return { label: "Ready to connect", tone: "neutral" };
-  }, [configSummary, status.connected]);
+  const connectionTone = status.connected ? "green" : configSummary ? "blue" : "yellow";
+  const connectionLabel = status.connected
+    ? "Connected"
+    : configSummary
+      ? "Ready"
+      : "Config required";
 
-  function importConfig() {
-    try {
-      setConfigSummary(parseOperatorConfig(configInput));
-      setConfigError("");
-    } catch (error) {
-      setConfigSummary(null);
-      setConfigError(error instanceof Error ? error.message : "Invalid JSON");
-    }
+  function parseConfig(value = configInput) {
+    const summary = parseOperatorConfig(value);
+    setConfigSummary(summary);
+    notifications.show({
+      color: "green",
+      title: "Operator config parsed",
+      message: `${summary.operator} @ ${summary.endpoint}`,
+    });
+    return summary;
   }
 
   async function handleConfigFile(file: File | null) {
@@ -251,18 +211,15 @@ function App() {
     const text = await file.text();
     setConfigInput(text);
     try {
-      setConfigSummary(parseOperatorConfig(text));
-      setConfigError("");
+      parseConfig(text);
     } catch (error) {
-      setConfigSummary(null);
-      setConfigError(error instanceof Error ? error.message : "Invalid JSON");
+      showError(error);
     }
   }
 
   async function connectGateway() {
     await runTask("Connecting", async () => {
-      const summary = parseOperatorConfig(configInput);
-      setConfigSummary(summary);
+      const summary = parseConfig();
       const result = await api.POST("/api/connect", {
         body: JSON.parse(configInput),
       });
@@ -322,22 +279,21 @@ function App() {
     setDataSets((current) => ({ ...current, jobs: unwrap<ApiData>(result) }));
   }
 
-  async function startListener(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function startListener(values: ListenerFormValues) {
     await runTask("Starting listener", async () => {
       const result = await api.POST("/api/listeners", {
         body: {
-          protocol: listenerForm.protocol,
-          host: listenerForm.host,
-          port: Number(listenerForm.port),
-          domain: listenerForm.domain || undefined,
-          domains: listenerForm.domain ? [listenerForm.domain] : undefined,
-          website: listenerForm.website || undefined,
-          persistent: listenerForm.persistent,
-          enforceOtp: listenerForm.enforceOtp,
+          protocol: values.protocol,
+          host: values.host,
+          port: values.port,
+          domain: values.domain || undefined,
+          domains: values.domain ? [values.domain] : undefined,
+          website: values.website || undefined,
+          persistent: values.persistent,
+          enforceOtp: values.enforceOtp,
         },
       });
-      appendConsole(`Started ${listenerForm.protocol} listener: ${formatJSON(unwrap(result))}`);
+      appendConsole(`Started ${values.protocol} listener: ${formatJSON(unwrap(result))}`);
       await refreshJobs();
     });
   }
@@ -345,7 +301,7 @@ function App() {
   async function killJob(id: unknown) {
     const numericID = Number(id);
     if (!Number.isFinite(numericID)) {
-      setApiError("Job ID is invalid.");
+      showError(new Error("Job ID is invalid."));
       return;
     }
     await runTask("Killing job", async () => {
@@ -357,50 +313,61 @@ function App() {
     });
   }
 
-  async function runSessionCommand(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function runSessionCommand(values: SessionCommandValues) {
     await runTask("Running command", async () => {
-      const args = sessionCommandForm.args
+      const args = values.args
         .split(" ")
         .map((arg) => arg.trim())
         .filter(Boolean);
       const result = await api.POST("/api/session-command", {
         body: {
-          command: sessionCommandForm.command,
-          sessionId: sessionCommandForm.sessionId,
-          path: sessionCommandForm.path || undefined,
+          command: values.command,
+          sessionId: values.sessionId,
+          path: values.path || undefined,
           args,
-          async: sessionCommandForm.async,
-          output: sessionCommandForm.output,
+          async: values.async,
+          output: values.output,
         },
       });
       appendConsole(formatJSON(unwrap(result)));
     });
   }
 
-  async function runRawJSON(
-    label: string,
-    path:
-      | "/api/implants/generate"
-      | "/api/implants/profiles"
-      | "/api/loot/content",
-  ) {
-    await runTask(label, async () => {
-      const payload = JSON.parse(rawPayload) as Record<string, unknown>;
-      const result = await api.POST(path, { body: payload });
+  async function generateImplant() {
+    await runTask("Generating implant", async () => {
+      const result = await api.POST("/api/implants/generate", {
+        body: JSON.parse(rawPayload),
+      });
+      appendConsole(formatJSON(unwrap(result)));
+    });
+  }
+
+  async function saveImplantProfile() {
+    await runTask("Saving implant profile", async () => {
+      const result = await api.POST("/api/implants/profiles", {
+        body: JSON.parse(rawPayload),
+      });
+      appendConsole(formatJSON(unwrap(result)));
+    });
+  }
+
+  async function fetchLootContent() {
+    await runTask("Loading loot", async () => {
+      const result = await api.POST("/api/loot/content", {
+        body: JSON.parse(rawPayload),
+      });
       appendConsole(formatJSON(unwrap(result)));
     });
   }
 
   async function runTask(label: string, task: () => Promise<void>) {
     setLoading(label);
-    setApiError("");
     try {
       await task();
+      notifications.show({ color: "green", title: label, message: "Done" });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setApiError(message);
-      appendConsole(`Error: ${message}`);
+      showError(error);
+      appendConsole(`Error: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setLoading("");
     }
@@ -436,6 +403,7 @@ function App() {
         return;
       case "status":
         await loadStatus();
+        appendConsole(formatJSON(status));
         return;
       case "refresh":
         await refreshAll();
@@ -471,598 +439,538 @@ function App() {
   }
 
   return (
-    <main className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">S</div>
-          <div>
-            <p className="eyebrow">Sliver</p>
-            <h1>Web Client</h1>
-          </div>
-        </div>
+    <AppShell
+      header={{ height: 64 }}
+      navbar={{ width: 280, breakpoint: "sm" }}
+      padding="md"
+    >
+      <AppShell.Header>
+        <Group h="100%" px="md" justify="space-between">
+          <Group gap="sm">
+            <Badge size="lg" variant="gradient" gradient={{ from: "cyan", to: "teal" }}>
+              S
+            </Badge>
+            <Box>
+              <Title order={3}>Sliver Web Client</Title>
+              <Text size="xs" c="dimmed">
+                React Router + Mantine + Go mTLS Gateway
+              </Text>
+            </Box>
+          </Group>
+          <Group>
+            <Badge color={connectionTone}>{connectionLabel}</Badge>
+            {loading ? <Badge color="blue">{loading}...</Badge> : null}
+          </Group>
+        </Group>
+      </AppShell.Header>
 
-        <nav className="nav-list" aria-label="Primary navigation">
+      <AppShell.Navbar p="md">
+        <Stack gap="xs">
           {navItems.map((item) => (
-            <button
-              key={item.key}
-              className={activeNav === item.key ? "nav-item active" : "nav-item"}
-              onClick={() => setActiveNav(item.key)}
-              type="button"
-            >
-              {item.label}
-            </button>
+            <NavLink
+              active={location.pathname === item.path}
+              component={RouterNavLink}
+              key={item.path}
+              label={item.label}
+              to={item.path}
+              variant="filled"
+            />
           ))}
-        </nav>
+        </Stack>
+      </AppShell.Navbar>
 
-        <section className="sidebar-card">
-          <p className="eyebrow">Connection</p>
-          <StatusPill label={gatewayState.label} tone={gatewayState.tone} />
-          <p className="muted">
-            Browser requests go to the Go gateway. The gateway forwards common
-            operations to Sliver over mTLS gRPC.
-          </p>
-        </section>
-      </aside>
+      <AppShell.Main>
+        <Container fluid>
+          <Stack gap="md">
+            <Hero
+              connectGateway={connectGateway}
+              handleConfigFile={handleConfigFile}
+              parseConfig={() => {
+                try {
+                  parseConfig();
+                } catch (error) {
+                  showError(error);
+                }
+              }}
+            />
 
-      <section className="content">
-        <header className="hero">
-          <div>
-            <p className="eyebrow">Operator workspace</p>
-            <h2>Sliver client experience for the browser</h2>
-            <p className="hero-copy">
-              Import an operator profile, connect the Go gateway, and manage
-              implants, sessions, beacons, listeners, jobs, loot, and command
-              workflows from one web dashboard.
-            </p>
-          </div>
-
-          <div className="hero-actions">
-            <label className="file-button">
-              Import sliver.cfg
-              <input
-                accept=".cfg,.json,application/json"
-                onChange={(event) => handleConfigFile(event.target.files?.[0] ?? null)}
-                type="file"
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
+              <MetricCard label="Sessions" value={rows.sessions.length} />
+              <MetricCard label="Beacons" value={rows.beacons.length} />
+              <MetricCard label="Jobs" value={rows.jobs.length} />
+              <MetricCard
+                label="Operator"
+                value={status.operator ?? configSummary?.operator ?? "Not loaded"}
               />
-            </label>
-            <button className="primary-button" onClick={importConfig} type="button">
-              Parse config
-            </button>
-            <button className="primary-button" onClick={connectGateway} type="button">
-              Connect
-            </button>
-          </div>
-        </header>
+            </SimpleGrid>
 
-        {apiError ? <p className="error-banner">{apiError}</p> : null}
-        {loading ? <p className="loading-banner">{loading}...</p> : null}
+            <Grid align="flex-start">
+              <Grid.Col span={{ base: 12, lg: 4 }}>
+                <ConnectionPanel
+                  configInput={configInput}
+                  configSummary={configSummary}
+                  disconnectGateway={disconnectGateway}
+                  gatewayUrl={gatewayUrl}
+                  loadStatus={loadStatus}
+                  refreshAll={refreshAll}
+                  setConfigInput={setConfigInput}
+                  setGatewayUrl={setGatewayUrl}
+                  status={status}
+                  submitConfig={() => {
+                    try {
+                      parseConfig();
+                    } catch (error) {
+                      showError(error);
+                    }
+                  }}
+                  connectGateway={connectGateway}
+                />
+              </Grid.Col>
 
-        <section className="stats-grid">
-          <StatCard label="Sessions" value={String(sessionRows.length)} />
-          <StatCard label="Beacons" value={String(beaconRows.length)} />
-          <StatCard label="Jobs" value={String(jobRows.length)} />
-          <StatCard
-            label="Operator"
-            value={status.operator ?? configSummary?.operator ?? "Not loaded"}
-          />
-        </section>
-
-        <section className="dashboard-grid">
-          <ConnectionPanel
-            configError={configError}
-            configInput={configInput}
-            configSummary={configSummary}
-            gatewayUrl={gatewayUrl}
-            status={status}
-            onConfigInputChange={setConfigInput}
-            onConnectGateway={connectGateway}
-            onDisconnectGateway={disconnectGateway}
-            onGatewayUrlChange={setGatewayUrl}
-            onImportConfig={importConfig}
-            onLoadStatus={loadStatus}
-            onRefreshAll={refreshAll}
-          />
-
-          <section className="panel">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Current view</p>
-                <h3>{navItems.find((item) => item.key === activeNav)?.label}</h3>
-              </div>
-              <StatusPill
-                label={status.connected ? "Live gateway" : "Not connected"}
-                tone={status.connected ? "success" : "warning"}
-              />
-            </div>
-            {renderActiveView({
-              activeNav,
-              beaconRows,
-              buildRows,
-              consoleInput,
-              consoleLines,
-              dataSets,
-              handleConsoleSubmit,
-              jobRows,
-              listenerForm,
-              lootRows,
-              profileRows,
-              rawPayload,
-              runGenerateImplant: () =>
-                runRawJSON("Generating implant", "/api/implants/generate"),
-              runSessionCommand,
-              saveImplantProfile: () =>
-                runRawJSON("Saving implant profile", "/api/implants/profiles"),
-              fetchLootContent: () => runRawJSON("Loading loot", "/api/loot/content"),
-              sessionCommandForm,
-              sessionRows,
-              setConsoleInput,
-              setListenerForm,
-              setRawPayload,
-              setSessionCommandForm,
-              startListener,
-              killJob,
-            })}
-          </section>
-        </section>
-      </section>
-    </main>
+              <Grid.Col span={{ base: 12, lg: 8 }}>
+                <Routes>
+                  <Route path="/" element={<Navigate to="/overview" replace />} />
+                  <Route
+                    path="/overview"
+                    element={<OverviewPage dataSets={dataSets} status={status} />}
+                  />
+                  <Route
+                    path="/implants"
+                    element={
+                      <ImplantsPage
+                        buildRows={rows.builds}
+                        generateImplant={generateImplant}
+                        profileRows={rows.profiles}
+                        rawPayload={rawPayload}
+                        saveImplantProfile={saveImplantProfile}
+                        setRawPayload={setRawPayload}
+                      />
+                    }
+                  />
+                  <Route
+                    path="/sessions"
+                    element={
+                      <SessionsPage
+                        rows={rows.sessions}
+                        runSessionCommand={runSessionCommand}
+                      />
+                    }
+                  />
+                  <Route path="/beacons" element={<DataPage rows={rows.beacons} />} />
+                  <Route
+                    path="/listeners"
+                    element={
+                      <ListenersPage
+                        jobRows={rows.jobs}
+                        startListener={startListener}
+                      />
+                    }
+                  />
+                  <Route
+                    path="/jobs"
+                    element={<JobsPage killJob={killJob} rows={rows.jobs} />}
+                  />
+                  <Route
+                    path="/loot"
+                    element={
+                      <LootPage
+                        fetchLootContent={fetchLootContent}
+                        rawPayload={rawPayload}
+                        rows={rows.loot}
+                        setRawPayload={setRawPayload}
+                      />
+                    }
+                  />
+                  <Route
+                    path="/console"
+                    element={
+                      <ConsolePage
+                        consoleInput={consoleInput}
+                        consoleLines={consoleLines}
+                        handleConsoleSubmit={handleConsoleSubmit}
+                        setConsoleInput={setConsoleInput}
+                      />
+                    }
+                  />
+                </Routes>
+              </Grid.Col>
+            </Grid>
+          </Stack>
+        </Container>
+      </AppShell.Main>
+    </AppShell>
   );
 }
 
-type StatusPillProps = {
-  label: string;
-  tone: string;
-};
-
-function StatusPill({ label, tone }: StatusPillProps) {
-  return <span className={`status-pill ${tone}`}>{label}</span>;
-}
-
-type StatCardProps = {
-  label: string;
-  value: string;
-};
-
-function StatCard({ label, value }: StatCardProps) {
+function Hero({
+  connectGateway,
+  handleConfigFile,
+  parseConfig,
+}: {
+  connectGateway: () => void;
+  handleConfigFile: (file: File | null) => void;
+  parseConfig: () => void;
+}) {
   return (
-    <article className="stat-card">
-      <p>{label}</p>
-      <strong>{value}</strong>
-    </article>
+    <Card withBorder radius="lg" p="xl">
+      <Group justify="space-between" align="flex-start">
+        <Box maw={760}>
+          <Text tt="uppercase" fw={800} size="xs" c="cyan">
+            Operator workspace
+          </Text>
+          <Title order={1}>Sliver client experience for the browser</Title>
+          <Text c="dimmed" mt="sm">
+            Import an operator profile, connect the Go gateway, and manage
+            implants, sessions, beacons, listeners, jobs, loot, and command
+            workflows through Mantine pages backed by generated API clients.
+          </Text>
+        </Box>
+        <Group>
+          <FileButton onChange={handleConfigFile} accept=".cfg,.json,application/json">
+            {(props) => <Button {...props}>Import sliver.cfg</Button>}
+          </FileButton>
+          <Button variant="light" onClick={parseConfig}>
+            Parse config
+          </Button>
+          <Button onClick={connectGateway}>Connect</Button>
+        </Group>
+      </Group>
+    </Card>
   );
 }
 
-type ConnectionPanelProps = {
-  configError: string;
-  configInput: string;
-  configSummary: ConfigSummary | null;
-  gatewayUrl: string;
-  status: GatewayStatus;
-  onConfigInputChange: (value: string) => void;
-  onConnectGateway: () => void;
-  onDisconnectGateway: () => void;
-  onGatewayUrlChange: (value: string) => void;
-  onImportConfig: () => void;
-  onLoadStatus: () => void;
-  onRefreshAll: () => void;
-};
+function MetricCard({ label, value }: { label: string; value: number | string }) {
+  return (
+    <Card withBorder radius="md">
+      <Text size="sm" c="dimmed">
+        {label}
+      </Text>
+      <Title order={2} lineClamp={1}>
+        {value}
+      </Title>
+    </Card>
+  );
+}
 
 function ConnectionPanel({
-  configError,
   configInput,
   configSummary,
+  connectGateway,
+  disconnectGateway,
   gatewayUrl,
+  loadStatus,
+  refreshAll,
+  setConfigInput,
+  setGatewayUrl,
   status,
-  onConfigInputChange,
-  onConnectGateway,
-  onDisconnectGateway,
-  onGatewayUrlChange,
-  onImportConfig,
-  onLoadStatus,
-  onRefreshAll,
-}: ConnectionPanelProps) {
+  submitConfig,
+}: {
+  configInput: string;
+  configSummary: ConfigSummary | null;
+  connectGateway: () => void;
+  disconnectGateway: () => void;
+  gatewayUrl: string;
+  loadStatus: () => void;
+  refreshAll: () => void;
+  setConfigInput: (value: string) => void;
+  setGatewayUrl: (value: string) => void;
+  status: GatewayStatus;
+  submitConfig: () => void;
+}) {
   return (
-    <section className="panel connection-panel">
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">Gateway setup</p>
-          <h3>Operator configuration</h3>
-        </div>
-        <StatusPill
-          label={status.connected ? "Connected" : "Waiting"}
-          tone={status.connected ? "success" : "warning"}
-        />
-      </div>
+    <Card withBorder radius="lg">
+      <Stack>
+        <Group justify="space-between">
+          <Box>
+            <Text tt="uppercase" fw={800} size="xs" c="cyan">
+              Gateway setup
+            </Text>
+            <Title order={3}>Operator configuration</Title>
+          </Box>
+          <Badge color={status.connected ? "green" : "yellow"}>
+            {status.connected ? "Connected" : "Waiting"}
+          </Badge>
+        </Group>
 
-      <label className="field">
-        <span>Go gateway URL</span>
-        <input
-          onChange={(event) => onGatewayUrlChange(event.target.value)}
+        <TextInput
+          label="Go gateway URL"
           placeholder="http://localhost:8080"
-          type="url"
           value={gatewayUrl}
+          onChange={(event) => setGatewayUrl(event.currentTarget.value)}
         />
-      </label>
-
-      <label className="field">
-        <span>Operator config JSON</span>
-        <textarea
-          onChange={(event) => onConfigInputChange(event.target.value)}
-          spellCheck={false}
+        <Textarea
+          autosize
+          minRows={10}
+          label="Operator config JSON"
           value={configInput}
+          onChange={(event) => setConfigInput(event.currentTarget.value)}
         />
-      </label>
+        <Group grow>
+          <Button variant="light" onClick={submitConfig}>
+            Parse
+          </Button>
+          <Button onClick={connectGateway}>Connect</Button>
+        </Group>
+        <Group grow>
+          <Button variant="default" onClick={loadStatus}>
+            Status
+          </Button>
+          <Button variant="default" onClick={refreshAll}>
+            Refresh
+          </Button>
+          <Button color="red" variant="light" onClick={disconnectGateway}>
+            Disconnect
+          </Button>
+        </Group>
 
-      {configError ? <p className="error-text">{configError}</p> : null}
-
-      <button className="primary-button full-width" onClick={onImportConfig} type="button">
-        Parse operator config
-      </button>
-      <div className="button-row">
-        <button className="secondary-button" onClick={onConnectGateway} type="button">
-          Connect
-        </button>
-        <button className="secondary-button" onClick={onLoadStatus} type="button">
-          Status
-        </button>
-        <button className="secondary-button" onClick={onRefreshAll} type="button">
-          Refresh
-        </button>
-        <button className="secondary-button danger" onClick={onDisconnectGateway} type="button">
-          Disconnect
-        </button>
-      </div>
-
-      <div className="config-summary">
-        <SummaryLine label="Gateway connected" value={status.connected ? "yes" : "no"} />
-        <SummaryLine label="Operator" value={status.operator ?? configSummary?.operator ?? "-"} />
-        <SummaryLine
-          label="Sliver RPC endpoint"
-          value={status.endpoint ?? configSummary?.endpoint ?? "-"}
-        />
-        <SummaryLine label="Token loaded" value={configSummary?.hasToken ? "yes" : "no"} />
-        <SummaryLine
-          label="Client certificate"
-          value={configSummary?.hasClientCertificate ? "yes" : "no"}
-        />
-        <SummaryLine label="Private key" value={configSummary?.hasPrivateKey ? "yes" : "no"} />
-        <SummaryLine
-          label="CA certificate"
-          value={configSummary?.hasCaCertificate ? "yes" : "no"}
-        />
-      </div>
-    </section>
+        <SimpleGrid cols={2}>
+          <Summary label="Connected" value={status.connected ? "yes" : "no"} />
+          <Summary label="Operator" value={status.operator ?? configSummary?.operator ?? "-"} />
+          <Summary
+            label="RPC endpoint"
+            value={status.endpoint ?? configSummary?.endpoint ?? "-"}
+          />
+          <Summary label="Token" value={configSummary?.hasToken ? "loaded" : "missing"} />
+          <Summary
+            label="Client cert"
+            value={configSummary?.hasClientCertificate ? "loaded" : "missing"}
+          />
+          <Summary label="Private key" value={configSummary?.hasPrivateKey ? "loaded" : "missing"} />
+        </SimpleGrid>
+      </Stack>
+    </Card>
   );
 }
 
-type SummaryLineProps = {
-  label: string;
-  value: string;
-};
-
-function SummaryLine({ label, value }: SummaryLineProps) {
+function Summary({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
+    <Paper withBorder p="sm" radius="md">
+      <Text size="xs" c="dimmed">
+        {label}
+      </Text>
+      <Text fw={700} truncate>
+        {value}
+      </Text>
+    </Paper>
   );
 }
 
-type ActiveViewProps = {
-  activeNav: NavItemKey;
-  beaconRows: TableRow[];
-  buildRows: TableRow[];
-  consoleInput: string;
-  consoleLines: string[];
+function OverviewPage({
+  dataSets,
+  status,
+}: {
   dataSets: DataSets;
-  handleConsoleSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  jobRows: TableRow[];
-  listenerForm: ListenerForm;
-  lootRows: TableRow[];
+  status: GatewayStatus;
+}) {
+  return (
+    <Stack>
+      <SimpleGrid cols={{ base: 1, md: 3 }}>
+        <Card withBorder radius="lg">
+          <Title order={4}>mTLS gateway</Title>
+          <Text c="dimmed" mt="xs">
+            Browser requests are routed to Go, while Go owns the Sliver mTLS gRPC
+            client and forwards common operator workflows.
+          </Text>
+        </Card>
+        <Card withBorder radius="lg">
+          <Title order={4}>Generated API contract</Title>
+          <Text c="dimmed" mt="xs">
+            Huma generates OpenAPI from route types, and openapi-typescript
+            generates frontend API types from the same spec.
+          </Text>
+        </Card>
+        <Card withBorder radius="lg">
+          <Title order={4}>Router pages</Title>
+          <Text c="dimmed" mt="xs">
+            React Router owns navigation for overview, implants, sessions,
+            beacons, listeners, jobs, loot, and console pages.
+          </Text>
+        </Card>
+      </SimpleGrid>
+      <JSONPanel title="Gateway status" data={status} />
+      <JSONPanel title="Version" data={dataSets.version} />
+      <JSONPanel title="Operators" data={dataSets.operators} />
+    </Stack>
+  );
+}
+
+function ImplantsPage({
+  buildRows,
+  generateImplant,
+  profileRows,
+  rawPayload,
+  saveImplantProfile,
+  setRawPayload,
+}: {
+  buildRows: TableRow[];
+  generateImplant: () => void;
   profileRows: TableRow[];
   rawPayload: string;
-  runGenerateImplant: () => void;
-  runSessionCommand: (event: FormEvent<HTMLFormElement>) => void;
   saveImplantProfile: () => void;
-  fetchLootContent: () => void;
-  sessionCommandForm: SessionCommandForm;
-  sessionRows: TableRow[];
-  setConsoleInput: (value: string) => void;
-  setListenerForm: (value: ListenerForm) => void;
   setRawPayload: (value: string) => void;
-  setSessionCommandForm: (value: SessionCommandForm) => void;
-  startListener: (event: FormEvent<HTMLFormElement>) => void;
-  killJob: (id: unknown) => void;
-};
-
-function renderActiveView(props: ActiveViewProps) {
-  switch (props.activeNav) {
-    case "overview":
-      return <OverviewView dataSets={props.dataSets} />;
-    case "implants":
-      return (
-        <ImplantsView
-          buildRows={props.buildRows}
-          profileRows={props.profileRows}
-          rawPayload={props.rawPayload}
-          runGenerateImplant={props.runGenerateImplant}
-          saveImplantProfile={props.saveImplantProfile}
-          setRawPayload={props.setRawPayload}
-        />
-      );
-    case "sessions":
-      return (
-        <SessionsView
-          rows={props.sessionRows}
-          runSessionCommand={props.runSessionCommand}
-          sessionCommandForm={props.sessionCommandForm}
-          setSessionCommandForm={props.setSessionCommandForm}
-        />
-      );
-    case "beacons":
-      return <DataTable rows={props.beaconRows} />;
-    case "listeners":
-      return (
-        <ListenersView
-          jobRows={props.jobRows}
-          listenerForm={props.listenerForm}
-          setListenerForm={props.setListenerForm}
-          startListener={props.startListener}
-        />
-      );
-    case "jobs":
-      return <JobsView killJob={props.killJob} rows={props.jobRows} />;
-    case "loot":
-      return (
-        <LootView
-          fetchLootContent={props.fetchLootContent}
-          rawPayload={props.rawPayload}
-          rows={props.lootRows}
-          setRawPayload={props.setRawPayload}
-        />
-      );
-    case "console":
-      return (
-        <ConsoleView
-          consoleInput={props.consoleInput}
-          consoleLines={props.consoleLines}
-          handleConsoleSubmit={props.handleConsoleSubmit}
-          setConsoleInput={props.setConsoleInput}
-        />
-      );
-    default:
-      return null;
-  }
-}
-
-function OverviewView({ dataSets }: { dataSets: DataSets }) {
+}) {
   return (
-    <>
-      <div className="overview-grid">
-        <article className="feature-card">
-          <h4>mTLS gateway</h4>
-          <p>
-            The browser talks to the Go gateway over HTTP. The gateway owns the
-            Sliver mTLS gRPC client and forwards common operator actions.
-          </p>
-        </article>
-        <article className="feature-card">
-          <h4>Generated API contract</h4>
-          <p>
-            Backend routes generate OpenAPI at runtime and the frontend client
-            is generated from the same spec.
-          </p>
-        </article>
-        <article className="feature-card">
-          <h4>Client workflow parity</h4>
-          <p>
-            Sessions, beacons, listeners, jobs, loot, implants, operators, and
-            console commands are wired to gateway APIs.
-          </p>
-        </article>
-      </div>
-      <JSONInspector title="Version" data={dataSets.version} />
-      <JSONInspector title="Operators" data={dataSets.operators} />
-    </>
+    <Stack>
+      <Tabs defaultValue="builds">
+        <Tabs.List>
+          <Tabs.Tab value="builds">Builds</Tabs.Tab>
+          <Tabs.Tab value="profiles">Profiles</Tabs.Tab>
+          <Tabs.Tab value="payload">Generate / Profile Payload</Tabs.Tab>
+        </Tabs.List>
+        <Tabs.Panel value="builds" pt="md">
+          <DataTable rows={buildRows} />
+        </Tabs.Panel>
+        <Tabs.Panel value="profiles" pt="md">
+          <DataTable rows={profileRows} />
+        </Tabs.Panel>
+        <Tabs.Panel value="payload" pt="md">
+          <Stack>
+            <JsonInput
+              autosize
+              formatOnBlur
+              minRows={14}
+              label="Raw Sliver GenerateReq / ImplantProfile payload"
+              validationError="Invalid JSON"
+              value={rawPayload}
+              onChange={setRawPayload}
+            />
+            <Group>
+              <Button onClick={generateImplant}>Generate implant</Button>
+              <Button variant="light" onClick={saveImplantProfile}>
+                Save profile
+              </Button>
+            </Group>
+          </Stack>
+        </Tabs.Panel>
+      </Tabs>
+    </Stack>
   );
 }
 
-type DataTableProps = {
-  rows: TableRow[];
-};
-
-function DataTable({ rows }: DataTableProps) {
-  if (rows.length === 0) {
-    return <p className="empty-state">No data available. Connect and refresh first.</p>;
-  }
-
-  const columns = Object.keys(rows[0]).slice(0, 10);
-
-  return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            {columns.map((column) => (
-              <th key={column}>{column}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, rowIndex) => (
-            <tr key={rowIndex}>
-              {columns.map((column) => (
-                <td key={column}>{formatCell(row[column])}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-type SessionsViewProps = {
-  rows: TableRow[];
-  runSessionCommand: (event: FormEvent<HTMLFormElement>) => void;
-  sessionCommandForm: SessionCommandForm;
-  setSessionCommandForm: (value: SessionCommandForm) => void;
-};
-
-function SessionsView({
+function SessionsPage({
   rows,
   runSessionCommand,
-  sessionCommandForm,
-  setSessionCommandForm,
-}: SessionsViewProps) {
+}: {
+  rows: TableRow[];
+  runSessionCommand: (values: SessionCommandValues) => void;
+}) {
+  const form = useForm<SessionCommandValues>({
+    initialValues: {
+      command: "ping",
+      sessionId: "",
+      path: "",
+      args: "",
+      async: false,
+      output: true,
+    },
+  });
+
   return (
-    <div className="stack">
+    <Stack>
       <DataTable rows={rows} />
-      <form className="action-form" onSubmit={runSessionCommand}>
-        <h4>Run session command</h4>
-        <div className="form-grid">
-          <label className="field">
-            <span>Command</span>
-            <select
-              onChange={(event) =>
-                setSessionCommandForm({
-                  ...sessionCommandForm,
-                  command: event.target.value as SessionCommandForm["command"],
-                })
-              }
-              value={sessionCommandForm.command}
-            >
-              {["ping", "ps", "pwd", "ls", "cd", "execute", "shell"].map((command) => (
-                <option key={command} value={command}>
-                  {command}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>Session ID</span>
-            <input
-              onChange={(event) =>
-                setSessionCommandForm({
-                  ...sessionCommandForm,
-                  sessionId: event.target.value,
-                })
-              }
-              value={sessionCommandForm.sessionId}
-            />
-          </label>
-          <label className="field">
-            <span>Path</span>
-            <input
-              onChange={(event) =>
-                setSessionCommandForm({
-                  ...sessionCommandForm,
-                  path: event.target.value,
-                })
-              }
-              placeholder="/tmp or /bin/hostname"
-              value={sessionCommandForm.path}
-            />
-          </label>
-          <label className="field">
-            <span>Args</span>
-            <input
-              onChange={(event) =>
-                setSessionCommandForm({
-                  ...sessionCommandForm,
-                  args: event.target.value,
-                })
-              }
-              placeholder="-la /tmp"
-              value={sessionCommandForm.args}
-            />
-          </label>
-        </div>
-        <button className="primary-button" type="submit">
-          Run command
-        </button>
-      </form>
-    </div>
+      <Card withBorder radius="lg">
+        <form onSubmit={form.onSubmit(runSessionCommand)}>
+          <Stack>
+            <Title order={4}>Run session command</Title>
+            <SimpleGrid cols={{ base: 1, md: 2 }}>
+              <Select
+                label="Command"
+                data={["ping", "ps", "pwd", "ls", "cd", "execute", "shell"]}
+                {...form.getInputProps("command")}
+              />
+              <TextInput label="Session ID" {...form.getInputProps("sessionId")} />
+              <TextInput
+                label="Path"
+                placeholder="/tmp or /bin/hostname"
+                {...form.getInputProps("path")}
+              />
+              <TextInput
+                label="Args"
+                placeholder="-la /tmp"
+                {...form.getInputProps("args")}
+              />
+            </SimpleGrid>
+            <Group>
+              <Switch label="Async" {...form.getInputProps("async", { type: "checkbox" })} />
+              <Switch
+                label="Capture output"
+                {...form.getInputProps("output", { type: "checkbox" })}
+              />
+            </Group>
+            <Button type="submit">Run command</Button>
+          </Stack>
+        </form>
+      </Card>
+    </Stack>
   );
 }
 
-type ListenersViewProps = {
-  jobRows: TableRow[];
-  listenerForm: ListenerForm;
-  setListenerForm: (value: ListenerForm) => void;
-  startListener: (event: FormEvent<HTMLFormElement>) => void;
-};
-
-function ListenersView({
+function ListenersPage({
   jobRows,
-  listenerForm,
-  setListenerForm,
   startListener,
-}: ListenersViewProps) {
+}: {
+  jobRows: TableRow[];
+  startListener: (values: ListenerFormValues) => void;
+}) {
+  const form = useForm<ListenerFormValues>({
+    initialValues: {
+      protocol: "mtls",
+      host: "0.0.0.0",
+      port: 8888,
+      domain: "",
+      website: "",
+      persistent: false,
+      enforceOtp: false,
+    },
+  });
+
   return (
-    <div className="stack">
-      <form className="action-form" onSubmit={startListener}>
-        <h4>Start listener</h4>
-        <div className="form-grid">
-          <label className="field">
-            <span>Protocol</span>
-            <select
-              onChange={(event) =>
-                setListenerForm({
-                  ...listenerForm,
-                  protocol: event.target.value as ListenerForm["protocol"],
-                })
-              }
-              value={listenerForm.protocol}
-            >
-              {["mtls", "http", "https", "dns"].map((protocol) => (
-                <option key={protocol} value={protocol}>
-                  {protocol}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>Host</span>
-            <input
-              onChange={(event) =>
-                setListenerForm({ ...listenerForm, host: event.target.value })
-              }
-              value={listenerForm.host}
-            />
-          </label>
-          <label className="field">
-            <span>Port</span>
-            <input
-              onChange={(event) =>
-                setListenerForm({ ...listenerForm, port: event.target.value })
-              }
-              type="number"
-              value={listenerForm.port}
-            />
-          </label>
-          <label className="field">
-            <span>Domain / DNS zone</span>
-            <input
-              onChange={(event) =>
-                setListenerForm({ ...listenerForm, domain: event.target.value })
-              }
-              value={listenerForm.domain}
-            />
-          </label>
-        </div>
-        <button className="primary-button" type="submit">
-          Start listener
-        </button>
-      </form>
-      <h4>Listener jobs</h4>
-      <DataTable rows={jobRows} />
-    </div>
+    <Stack>
+      <Card withBorder radius="lg">
+        <form onSubmit={form.onSubmit(startListener)}>
+          <Stack>
+            <Title order={4}>Start listener</Title>
+            <SimpleGrid cols={{ base: 1, md: 2 }}>
+              <Select
+                label="Protocol"
+                data={["mtls", "http", "https", "dns"]}
+                {...form.getInputProps("protocol")}
+              />
+              <TextInput label="Host" {...form.getInputProps("host")} />
+              <NumberInput
+                label="Port"
+                min={1}
+                max={65535}
+                {...form.getInputProps("port")}
+              />
+              <TextInput label="Domain / DNS zone" {...form.getInputProps("domain")} />
+              <TextInput label="Website" {...form.getInputProps("website")} />
+            </SimpleGrid>
+            <Group>
+              <Switch
+                label="Persistent"
+                {...form.getInputProps("persistent", { type: "checkbox" })}
+              />
+              <Switch
+                label="Enforce OTP"
+                {...form.getInputProps("enforceOtp", { type: "checkbox" })}
+              />
+            </Group>
+            <Button type="submit">Start listener</Button>
+          </Stack>
+        </form>
+      </Card>
+      <Card withBorder radius="lg">
+        <Title order={4} mb="md">
+          Listener jobs
+        </Title>
+        <DataTable rows={jobRows} />
+      </Card>
+    </Stack>
   );
 }
 
-function JobsView({
+function JobsPage({
   killJob,
   rows,
 }: {
@@ -1070,65 +978,25 @@ function JobsView({
   rows: TableRow[];
 }) {
   return (
-    <div className="stack">
+    <Stack>
       <DataTable rows={rows} />
-      <div className="button-row">
+      <Group>
         {rows.slice(0, 8).map((row) => (
-          <button
-            className="secondary-button danger"
+          <Button
+            color="red"
             key={String(row.id ?? row.ID)}
             onClick={() => killJob(row.id ?? row.ID)}
-            type="button"
+            variant="light"
           >
             Kill job {String(row.id ?? row.ID)}
-          </button>
+          </Button>
         ))}
-      </div>
-    </div>
+      </Group>
+    </Stack>
   );
 }
 
-type ImplantsViewProps = {
-  buildRows: TableRow[];
-  profileRows: TableRow[];
-  rawPayload: string;
-  runGenerateImplant: () => void;
-  saveImplantProfile: () => void;
-  setRawPayload: (value: string) => void;
-};
-
-function ImplantsView({
-  buildRows,
-  profileRows,
-  rawPayload,
-  runGenerateImplant,
-  saveImplantProfile,
-  setRawPayload,
-}: ImplantsViewProps) {
-  return (
-    <div className="stack">
-      <h4>Builds</h4>
-      <DataTable rows={buildRows} />
-      <h4>Profiles</h4>
-      <DataTable rows={profileRows} />
-      <RawPayloadEditor
-        label="Generate implant / save profile payload"
-        rawPayload={rawPayload}
-        setRawPayload={setRawPayload}
-      />
-      <div className="button-row">
-        <button className="primary-button" onClick={runGenerateImplant} type="button">
-          Generate implant
-        </button>
-        <button className="secondary-button" onClick={saveImplantProfile} type="button">
-          Save profile
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function LootView({
+function LootPage({
   fetchLootContent,
   rawPayload,
   rows,
@@ -1140,80 +1008,146 @@ function LootView({
   setRawPayload: (value: string) => void;
 }) {
   return (
-    <div className="stack">
+    <Stack>
       <DataTable rows={rows} />
-      <RawPayloadEditor
+      <JsonInput
+        autosize
+        formatOnBlur
+        minRows={10}
         label="Loot content payload"
-        rawPayload={rawPayload}
-        setRawPayload={setRawPayload}
-      />
-      <button className="primary-button" onClick={fetchLootContent} type="button">
-        Fetch loot content
-      </button>
-    </div>
-  );
-}
-
-function RawPayloadEditor({
-  label,
-  rawPayload,
-  setRawPayload,
-}: {
-  label: string;
-  rawPayload: string;
-  setRawPayload: (value: string) => void;
-}) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      <textarea
-        className="small-textarea"
-        onChange={(event) => setRawPayload(event.target.value)}
-        spellCheck={false}
+        validationError="Invalid JSON"
         value={rawPayload}
+        onChange={setRawPayload}
       />
-    </label>
+      <Button onClick={fetchLootContent}>Fetch loot content</Button>
+    </Stack>
   );
 }
 
-function JSONInspector({ data, title }: { data: ApiData; title: string }) {
+function DataPage({ rows }: { rows: TableRow[] }) {
+  return <DataTable rows={rows} />;
+}
+
+function DataTable({ rows }: { rows: TableRow[] }) {
+  if (rows.length === 0) {
+    return (
+      <Card withBorder radius="lg">
+        <Text c="dimmed">No data available. Connect and refresh first.</Text>
+      </Card>
+    );
+  }
+
+  const columns = Object.keys(rows[0]).slice(0, 10);
+
   return (
-    <section className="json-inspector">
-      <h4>{title}</h4>
-      <pre>{formatJSON(data ?? {})}</pre>
-    </section>
+    <Table.ScrollContainer minWidth={720}>
+      <Table striped highlightOnHover withTableBorder withColumnBorders>
+        <Table.Thead>
+          <Table.Tr>
+            {columns.map((column) => (
+              <Table.Th key={column}>{column}</Table.Th>
+            ))}
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {rows.map((row, rowIndex) => (
+            <Table.Tr key={rowIndex}>
+              {columns.map((column) => (
+                <Table.Td key={column}>{formatCell(row[column])}</Table.Td>
+              ))}
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+    </Table.ScrollContainer>
   );
 }
 
-type ConsoleViewProps = {
-  consoleInput: string;
-  consoleLines: string[];
-  handleConsoleSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  setConsoleInput: (value: string) => void;
-};
-
-function ConsoleView({
+function ConsolePage({
   consoleInput,
   consoleLines,
   handleConsoleSubmit,
   setConsoleInput,
-}: ConsoleViewProps) {
+}: {
+  consoleInput: string;
+  consoleLines: string[];
+  handleConsoleSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  setConsoleInput: (value: string) => void;
+}) {
   return (
-    <div className="console">
-      <pre aria-live="polite">
-        {consoleLines.length ? consoleLines.join("\n") : "Console cleared."}
-      </pre>
+    <Stack>
+      <Paper withBorder radius="lg" p="md" bg="dark.8">
+        <ScrollArea h={420}>
+          <Code block c="green.2">
+            {consoleLines.length ? consoleLines.join("\n") : "Console cleared."}
+          </Code>
+        </ScrollArea>
+      </Paper>
       <form onSubmit={handleConsoleSubmit}>
-        <span>web-client&gt;</span>
-        <input
-          aria-label="Console command"
-          onChange={(event) => setConsoleInput(event.target.value)}
-          placeholder="help"
-          value={consoleInput}
-        />
+        <Group align="flex-end">
+          <TextInput
+            flex={1}
+            label="web-client>"
+            placeholder="help"
+            value={consoleInput}
+            onChange={(event) => setConsoleInput(event.currentTarget.value)}
+          />
+          <Button type="submit">Run</Button>
+        </Group>
       </form>
-    </div>
+    </Stack>
   );
+}
+
+function JSONPanel({ data, title }: { data: unknown; title: string }) {
+  return (
+    <Card withBorder radius="lg">
+      <Title order={4} mb="sm">
+        {title}
+      </Title>
+      <ScrollArea h={240}>
+        <Code block>{formatJSON(data ?? {})}</Code>
+      </ScrollArea>
+    </Card>
+  );
+}
+
+function parseOperatorConfig(input: string): ConfigSummary {
+  const parsed = JSON.parse(input) as Partial<OperatorConfig>;
+  const requiredFields: Array<keyof OperatorConfig> = [
+    "operator",
+    "token",
+    "lhost",
+    "lport",
+    "ca_certificate",
+    "private_key",
+    "certificate",
+  ];
+
+  for (const field of requiredFields) {
+    if (!parsed[field]) {
+      throw new Error(`Missing required field: ${field}`);
+    }
+  }
+
+  if (typeof parsed.operator !== "string") {
+    throw new Error("operator must be a string");
+  }
+  if (typeof parsed.lhost !== "string") {
+    throw new Error("lhost must be a string");
+  }
+  if (typeof parsed.lport !== "number") {
+    throw new Error("lport must be a number");
+  }
+
+  return {
+    operator: parsed.operator,
+    endpoint: `${parsed.lhost}:${parsed.lport}`,
+    hasToken: Boolean(parsed.token),
+    hasClientCertificate: Boolean(parsed.certificate),
+    hasPrivateKey: Boolean(parsed.private_key),
+    hasCaCertificate: Boolean(parsed.ca_certificate),
+  };
 }
 
 function unwrap<T>(result: { data?: unknown; error?: unknown; response: Response }): T {
@@ -1263,6 +1197,14 @@ function formatCell(value: unknown) {
 
 function formatJSON(value: unknown) {
   return JSON.stringify(value, null, 2);
+}
+
+function showError(error: unknown) {
+  notifications.show({
+    color: "red",
+    title: "Operation failed",
+    message: error instanceof Error ? error.message : String(error),
+  });
 }
 
 export default App;
